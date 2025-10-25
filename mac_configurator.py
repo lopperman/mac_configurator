@@ -18,6 +18,12 @@ from rich.progress import track
 from rich import box
 from rich.text import Text
 
+try:
+    import jsonschema
+except ImportError:
+    print("Error: jsonschema package not found. Install with: pip install jsonschema")
+    exit(1)
+
 
 def is_admin():
     """Check if current user has admin privileges"""
@@ -29,45 +35,129 @@ def is_admin():
 
 
 class ConfigManager:
-    """Manages configuration file operations"""
+    """Manages configuration file operations with schema validation"""
 
-    def __init__(self, config_path='config.json'):
+    def __init__(self, config_path='config.json', schema_path='settings_schema.json'):
         self.config_path = Path(config_path)
+        self.schema_path = Path(schema_path)
+        self.schema = self.load_schema()
         self.config = self.load_config()
 
+    def load_schema(self):
+        """Load settings schema from JSON file"""
+        if not self.schema_path.exists():
+            raise FileNotFoundError(f"Schema file not found: {self.schema_path}")
+
+        with open(self.schema_path, 'r') as f:
+            return json.load(f)
+
     def load_config(self):
-        """Load configuration from JSON file"""
+        """Load configuration from JSON file and validate against schema"""
         if self.config_path.exists():
             with open(self.config_path, 'r') as f:
-                return json.load(f)
+                config = json.load(f)
+
+            # Validate configuration against schema
+            try:
+                jsonschema.validate(instance=config, schema=self.schema)
+            except jsonschema.ValidationError as e:
+                print(f"Warning: Configuration validation error: {e.message}")
+                print(f"Path: {' -> '.join(str(p) for p in e.path)}")
+                print("Continuing with invalid configuration...")
+
+            return config
         return {"settings": {}}
 
     def save_config(self):
-        """Save configuration to JSON file"""
+        """Save configuration to JSON file after validation"""
+        # Validate before saving
+        try:
+            jsonschema.validate(instance=self.config, schema=self.schema)
+        except jsonschema.ValidationError as e:
+            raise ValueError(f"Configuration validation failed: {e.message}")
+
         with open(self.config_path, 'w') as f:
             json.dump(self.config, f, indent=2)
 
     def get_setting(self, key):
-        """Get a specific setting value"""
+        """Get a specific setting value (returns None if not explicitly configured)"""
         return self.config.get('settings', {}).get(key)
 
+    def has_setting(self, key):
+        """Check if a setting has been explicitly configured"""
+        return key in self.config.get('settings', {})
+
     def set_setting(self, key, value):
-        """Set a specific setting value"""
+        """Set a specific setting value with validation"""
+        # Check if setting exists in schema
+        if key not in self.schema.get('properties', {}).get('settings', {}).get('properties', {}):
+            raise ValueError(f"Unknown setting: {key}")
+
+        # Validate the value against the schema for this specific setting
+        setting_schema = self.schema['properties']['settings']['properties'][key]
+        try:
+            jsonschema.validate(instance=value, schema=setting_schema)
+        except jsonschema.ValidationError as e:
+            raise ValueError(f"Invalid value for {key}: {e.message}")
+
         if 'settings' not in self.config:
             self.config['settings'] = {}
         self.config['settings'][key] = value
         self.save_config()
+
+    def delete_setting(self, key):
+        """Delete a configured setting (unset it)"""
+        if 'settings' in self.config and key in self.config['settings']:
+            del self.config['settings'][key]
+            self.save_config()
+            return True
+        return False
+
+    def get_all_configured_settings(self):
+        """Get all explicitly configured settings"""
+        return self.config.get('settings', {})
+
+    def get_schema_for_setting(self, key):
+        """Get the schema definition for a specific setting"""
+        return self.schema.get('properties', {}).get('settings', {}).get('properties', {}).get(key)
 
 
 class WiFiHandler:
     """Handles WiFi-related operations"""
 
     @staticmethod
+    def _get_wifi_interface():
+        """Detect the WiFi interface name"""
+        try:
+            # Try to list all network services and find WiFi
+            result = subprocess.run(
+                ['networksetup', '-listallhardwareports'],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+
+            # Parse output to find WiFi device
+            lines = result.stdout.split('\n')
+            for i, line in enumerate(lines):
+                if 'Wi-Fi' in line or 'AirPort' in line:
+                    # Next line after "Hardware Port: Wi-Fi" is "Device: enX"
+                    if i + 1 < len(lines) and 'Device:' in lines[i + 1]:
+                        device = lines[i + 1].split('Device:')[1].strip()
+                        return device
+
+            # Fallback to en0 if not found
+            return 'en0'
+        except subprocess.CalledProcessError:
+            return 'en0'
+
+    @staticmethod
     def get_current_state():
         """Get current WiFi state (enabled/disabled)"""
         try:
+            interface = WiFiHandler._get_wifi_interface()
             result = subprocess.run(
-                ['networksetup', '-getairportpower', 'en0'],
+                ['networksetup', '-getairportpower', interface],
                 capture_output=True,
                 text=True,
                 check=True
@@ -75,21 +165,21 @@ class WiFiHandler:
             # Output format: "Wi-Fi Power (en0): On" or "Wi-Fi Power (en0): Off"
             return 'On' in result.stdout
         except subprocess.CalledProcessError:
-            print("Error: Could not get WiFi state")
+            # Silently fail - the UI will show N/A
             return None
 
     @staticmethod
     def set_state(enabled):
         """Set WiFi state (True=on, False=off)"""
         try:
+            interface = WiFiHandler._get_wifi_interface()
             state = 'on' if enabled else 'off'
             subprocess.run(
-                ['networksetup', '-setairportpower', 'en0', state],
+                ['networksetup', '-setairportpower', interface, state],
                 check=True
             )
             return True
         except subprocess.CalledProcessError:
-            print(f"Error: Could not set WiFi to {state}")
             return False
 
 
@@ -330,78 +420,79 @@ class MacConfigurator:
         self.finder_handler = FinderHandler()
         self.system_handler = SystemHandler()
 
-        # Define settings structure organized by category
-        self.categories = {
-            'Network': {
-                'wifi_enabled': {
-                    'name': 'WiFi Enabled',
-                    'type': 'boolean',
-                    'get_current': self.wifi_handler.get_current_state,
-                    'set_value': self.wifi_handler.set_state,
-                    'requires_admin': True
-                }
-            },
-            'Audio': {
-                'audio_input_muted': {
-                    'name': 'Input Muted',
-                    'type': 'boolean',
-                    'get_current': self.audio_input_handler.get_mute_state,
-                    'set_value': self.audio_input_handler.set_mute_state,
-                    'requires_admin': False
-                },
-                'audio_output_volume': {
-                    'name': 'Output Volume',
-                    'type': 'integer',
-                    'min': 0,
-                    'max': 100,
-                    'get_current': self.audio_output_handler.get_volume,
-                    'set_value': self.audio_output_handler.set_volume,
-                    'requires_admin': False
-                }
-            },
-            'Dock': {
-                'dock_autohide': {
-                    'name': 'Auto-hide Dock',
-                    'type': 'boolean',
-                    'get_current': self.dock_handler.get_autohide,
-                    'set_value': self.dock_handler.set_autohide,
-                    'requires_admin': False
-                },
-                'dock_position': {
-                    'name': 'Dock Position',
-                    'type': 'choice',
-                    'choices': ['left', 'bottom', 'right'],
-                    'get_current': self.dock_handler.get_position,
-                    'set_value': self.dock_handler.set_position,
-                    'requires_admin': False
-                }
-            },
-            'Finder': {
-                'finder_show_hidden': {
-                    'name': 'Show Hidden Files',
-                    'type': 'boolean',
-                    'get_current': self.finder_handler.get_show_hidden_files,
-                    'set_value': self.finder_handler.set_show_hidden_files,
-                    'requires_admin': False
-                },
-                'finder_show_extensions': {
-                    'name': 'Show All Extensions',
-                    'type': 'boolean',
-                    'get_current': self.finder_handler.get_show_extensions,
-                    'set_value': self.finder_handler.set_show_extensions,
-                    'requires_admin': False
-                }
-            },
-            'System': {
-                'screenshot_location': {
-                    'name': 'Screenshot Location',
-                    'type': 'string',
-                    'get_current': self.system_handler.get_screenshot_location,
-                    'set_value': self.system_handler.set_screenshot_location,
-                    'requires_admin': False
-                }
-            }
+        # Handler mapping for dynamic lookup
+        self.handler_map = {
+            'WiFiHandler': self.wifi_handler,
+            'AudioInputHandler': self.audio_input_handler,
+            'AudioOutputHandler': self.audio_output_handler,
+            'DockHandler': self.dock_handler,
+            'FinderHandler': self.finder_handler,
+            'SystemHandler': self.system_handler
         }
+
+        # Handler method mapping for each setting
+        self.handler_methods = {
+            'wifi_enabled': ('get_current_state', 'set_state'),
+            'audio_input_muted': ('get_mute_state', 'set_mute_state'),
+            'audio_output_volume': ('get_volume', 'set_volume'),
+            'dock_autohide': ('get_autohide', 'set_autohide'),
+            'dock_position': ('get_position', 'set_position'),
+            'finder_show_hidden': ('get_show_hidden_files', 'set_show_hidden_files'),
+            'finder_show_extensions': ('get_show_extensions', 'set_show_extensions'),
+            'screenshot_location': ('get_screenshot_location', 'set_screenshot_location')
+        }
+
+        # Build settings structure from schema
+        self.categories = self._build_categories_from_schema()
+
+    def _build_categories_from_schema(self):
+        """Build categories structure from JSON schema"""
+        categories = {}
+        schema_settings = self.config_manager.schema.get('properties', {}).get('settings', {}).get('properties', {})
+
+        for setting_key, setting_schema in schema_settings.items():
+            category = setting_schema.get('category', 'Other')
+
+            # Initialize category if not exists
+            if category not in categories:
+                categories[category] = {}
+
+            # Get handler and methods
+            handler_name = setting_schema.get('handler')
+            handler = self.handler_map.get(handler_name)
+            get_method, set_method = self.handler_methods.get(setting_key, (None, None))
+
+            if not handler or not get_method or not set_method:
+                print(f"Warning: Handler not found for setting: {setting_key}")
+                continue
+
+            # Map schema type to internal type
+            schema_type = setting_schema.get('type')
+            internal_type = schema_type
+
+            # Build setting info
+            setting_info = {
+                'name': setting_schema.get('title', setting_key),
+                'type': internal_type,
+                'get_current': getattr(handler, get_method),
+                'set_value': getattr(handler, set_method),
+                'requires_admin': setting_schema.get('requires_admin', False)
+            }
+
+            # Add type-specific properties
+            if schema_type == 'integer':
+                if 'minimum' in setting_schema:
+                    setting_info['min'] = setting_schema['minimum']
+                if 'maximum' in setting_schema:
+                    setting_info['max'] = setting_schema['maximum']
+            elif 'enum' in setting_schema:
+                # Choice/enum type
+                setting_info['type'] = 'choice'
+                setting_info['choices'] = setting_schema['enum']
+
+            categories[category][setting_key] = setting_info
+
+        return categories
 
     def manage_settings(self):
         """Interactive settings manager with category navigation"""
@@ -471,24 +562,35 @@ class MacConfigurator:
             table = Table(title=f"[bold bright_white]{category_name} Settings[/bold bright_white]", box=box.ROUNDED)
             table.add_column("Option", style="bright_cyan bold", width=8)
             table.add_column("Setting", style="bright_white", width=25)
-            table.add_column("Configured", style="bright_yellow", width=15, header_style="bright_yellow bold")
-            table.add_column("Current", style="bright_magenta", width=15, header_style="bright_magenta bold")
+            table.add_column("Your Config", style="bright_yellow", width=15, header_style="bright_yellow bold")
+            table.add_column("Live System", style="bright_magenta", width=15, header_style="bright_magenta bold")
             table.add_column("Status", justify="center", width=8, header_style="bright_white bold")
 
             for idx, setting_key in enumerate(setting_keys, 1):
                 setting_info = settings[setting_key]
                 configured_value = self.config_manager.get_setting(setting_key)
+                is_configured = self.config_manager.has_setting(setting_key)
                 current_value = setting_info['get_current']()
 
+                # Handle None values from handler methods
+                current_display = current_value if current_value is not None else "[dim italic]N/A[/dim italic]"
+
                 # Color-coded status with different symbols
-                if configured_value == current_value:
+                if not is_configured:
+                    # Not configured - show as inactive
+                    status = "[dim]○[/dim]"
+                    configured_str = "[dim italic]Not set[/dim italic]"
+                    current_str = f"[dim]{current_display}[/dim]" if current_value is not None else current_display
+                elif configured_value == current_value:
+                    # Matches system
                     status = "[bold green]✓[/bold green]"
                     configured_str = f"[dim]{configured_value}[/dim]"
-                    current_str = f"[dim]{current_value}[/dim]"
+                    current_str = f"[dim]{current_display}[/dim]" if current_value is not None else current_display
                 else:
+                    # Differs from system
                     status = "[bold yellow]⚠[/bold yellow]"
                     configured_str = f"[bold bright_yellow]{configured_value}[/bold bright_yellow]"
-                    current_str = f"[bold bright_magenta]{current_value}[/bold bright_magenta]"
+                    current_str = f"[bold bright_magenta]{current_display}[/bold bright_magenta]" if current_value is not None else current_display
 
                 # Add lock icon if requires admin and user is not admin
                 setting_name = setting_info['name']
@@ -527,6 +629,7 @@ class MacConfigurator:
     def _edit_setting(self, setting_key, setting_info):
         """Edit a specific setting"""
         current_value = self.config_manager.get_setting(setting_key)
+        is_configured = self.config_manager.has_setting(setting_key)
         system_value = setting_info['get_current']()
         requires_admin = setting_info.get('requires_admin', False)
 
@@ -541,23 +644,87 @@ class MacConfigurator:
         if requires_admin and not self.is_admin:
             self.console.print("[red bold]🔒 Requires admin privileges[/red bold]")
 
-        # Show comparison in a mini table
+        # Show comparison in a mini table with clear labels
         comparison_table = Table(show_header=True, box=box.SIMPLE, padding=(0, 1))
-        comparison_table.add_column("Source", style="dim")
-        comparison_table.add_column("Value", style="bold")
+        comparison_table.add_column("Source", style="dim", width=20)
+        comparison_table.add_column("Value", style="bold", width=30)
 
-        comparison_table.add_row("Configured", f"[bright_yellow]{current_value}[/bright_yellow]")
-        comparison_table.add_row("System", f"[bright_magenta]{system_value}[/bright_magenta]")
+        configured_display = f"[bright_yellow]{current_value}[/bright_yellow]" if is_configured else "[dim italic]Not configured[/dim italic]"
+        system_display = f"[bright_magenta]{system_value}[/bright_magenta]" if system_value is not None else "[dim italic]N/A[/dim italic]"
+
+        comparison_table.add_row("Your Config", configured_display)
+        comparison_table.add_row("Current System Value", system_display)
 
         self.console.print(comparison_table)
+
+        # Add helpful note if not configured
+        if not is_configured:
+            self.console.print("[dim italic]Note: This setting is not configured. The system is currently using its own value.[/dim italic]")
+        elif system_value is not None and current_value != system_value:
+            self.console.print(f"[yellow]⚠ Your configured value differs from the current system value.[/yellow]")
+
+        # If configured value differs from system, offer to apply immediately
+        if is_configured and system_value is not None and current_value != system_value:
+            self.console.print()
+            if requires_admin and not self.is_admin:
+                self.console.print("[yellow]⚠ This setting requires admin privileges and cannot be applied.[/yellow]")
+            else:
+                if Confirm.ask("[cyan]Apply this setting now?[/cyan]", default=False):
+                    self.console.print(f"Applying [bold]{setting_info['name']}[/bold]...", end=" ")
+                    if setting_info['set_value'](current_value):
+                        self.console.print("[green]✓ Success[/green]")
+
+                        # Show refreshed status
+                        self.console.print()
+                        self.console.print("[bold cyan]━━━ Current Status ━━━[/bold cyan]")
+
+                        # Re-read system value
+                        updated_system = setting_info['get_current']()
+
+                        status_table = Table(show_header=True, box=box.SIMPLE, padding=(0, 1))
+                        status_table.add_column("Source", style="dim", width=20)
+                        status_table.add_column("Value", style="bold", width=30)
+
+                        config_display = f"[bright_yellow]{current_value}[/bright_yellow]"
+                        system_display = f"[bright_magenta]{updated_system}[/bright_magenta]" if updated_system is not None else "[dim italic]N/A[/dim italic]"
+
+                        status_table.add_row("Your Config", config_display)
+                        status_table.add_row("Current System Value", system_display)
+
+                        self.console.print(status_table)
+
+                        if current_value == updated_system:
+                            self.console.print("[bold green]✓ Config and system are now in sync![/bold green]")
+                        else:
+                            self.console.print("[yellow]⚠ Applied but values still differ - the setting may take time to update[/yellow]")
+
+                        self.console.input("\nPress Enter to continue...")
+                        return
+                    else:
+                        self.console.print("[red]✗ Failed[/red]")
+
+        # Option to delete/unset if currently configured
+        if is_configured:
+            self.console.print()
+            if Confirm.ask("[red]Delete this configured setting (unset)?[/red]", default=False):
+                if self.config_manager.delete_setting(setting_key):
+                    self.console.print("\n[bold green]✓ Setting deleted[/bold green] - no longer configured")
+                    self.console.input("\nPress Enter to continue...")
+                    return
+                else:
+                    self.console.print("\n[bold red]✗ Failed to delete setting[/bold red]")
+                    self.console.input("\nPress Enter to continue...")
+                    return
 
         new_value = None
         value_changed = False
 
         if setting_info['type'] == 'boolean':
+            # Use configured value if available, otherwise use system value, otherwise True
+            default_value = current_value if isinstance(current_value, bool) else (system_value if isinstance(system_value, bool) else True)
             result = Confirm.ask(
                 f"\n[cyan]Set {setting_info['name']} to[/cyan]",
-                default=current_value if isinstance(current_value, bool) else True
+                default=default_value
             )
             if result != current_value:
                 self.config_manager.set_setting(setting_key, result)
@@ -571,10 +738,13 @@ class MacConfigurator:
             min_val = setting_info.get('min', 0)
             max_val = setting_info.get('max', 100)
 
+            # Use configured value if available, otherwise use system value, otherwise min
+            default_value = current_value if isinstance(current_value, int) else (system_value if isinstance(system_value, int) else min_val)
+
             try:
                 value = IntPrompt.ask(
                     f"\n[cyan]Set value ({min_val}-{max_val})[/cyan]",
-                    default=current_value if isinstance(current_value, int) else min_val
+                    default=default_value
                 )
                 if min_val <= value <= max_val:
                     if value != current_value:
@@ -591,10 +761,18 @@ class MacConfigurator:
 
         elif setting_info['type'] == 'choice':
             choices = setting_info.get('choices', [])
+            # Use configured value if valid, otherwise use system value if valid, otherwise first choice
+            if current_value in choices:
+                default_value = current_value
+            elif system_value in choices:
+                default_value = system_value
+            else:
+                default_value = choices[0] if choices else None
+
             result = Prompt.ask(
                 f"\n[cyan]Select {setting_info['name']}[/cyan]",
                 choices=choices,
-                default=current_value if current_value in choices else choices[0]
+                default=default_value
             )
             if result != current_value:
                 self.config_manager.set_setting(setting_key, result)
@@ -605,9 +783,17 @@ class MacConfigurator:
                 self.console.print(f"\n[dim italic]→ Value unchanged[/dim italic]")
 
         elif setting_info['type'] == 'string':
+            # Use configured value if available, otherwise use system value, otherwise empty string
+            if current_value:
+                default_value = str(current_value)
+            elif system_value:
+                default_value = str(system_value)
+            else:
+                default_value = ""
+
             result = Prompt.ask(
                 f"\n[cyan]Enter {setting_info['name']}[/cyan]",
-                default=str(current_value) if current_value else ""
+                default=default_value
             )
             if result != current_value:
                 self.config_manager.set_setting(setting_key, result)
@@ -618,6 +804,7 @@ class MacConfigurator:
                 self.console.print(f"\n[dim italic]→ Value unchanged[/dim italic]")
 
         # Check if we should apply the setting now
+        applied = False
         if value_changed:
             new_system_value = setting_info['get_current']()
             if new_value != new_system_value:
@@ -631,10 +818,37 @@ class MacConfigurator:
                         self.console.print(f"Applying [bold]{setting_info['name']}[/bold]...", end=" ")
                         if setting_info['set_value'](new_value):
                             self.console.print("[green]✓ Success[/green]")
+                            applied = True
                         else:
                             self.console.print("[red]✗ Failed[/red]")
                     else:
                         self.console.print("[dim]Skipped - use 'Apply Settings Now' from main menu to apply later[/dim]")
+
+        # Show refreshed status after save/apply
+        if value_changed or applied:
+            self.console.print()
+            self.console.print("[bold cyan]━━━ Current Status ━━━[/bold cyan]")
+
+            # Re-read values from system
+            updated_config = self.config_manager.get_setting(setting_key)
+            updated_system = setting_info['get_current']()
+
+            status_table = Table(show_header=True, box=box.SIMPLE, padding=(0, 1))
+            status_table.add_column("Source", style="dim", width=20)
+            status_table.add_column("Value", style="bold", width=30)
+
+            config_display = f"[bright_yellow]{updated_config}[/bright_yellow]" if updated_config is not None else "[dim italic]Not configured[/dim italic]"
+            system_display = f"[bright_magenta]{updated_system}[/bright_magenta]" if updated_system is not None else "[dim italic]N/A[/dim italic]"
+
+            status_table.add_row("Your Config", config_display)
+            status_table.add_row("Current System Value", system_display)
+
+            self.console.print(status_table)
+
+            if updated_config == updated_system:
+                self.console.print("[bold green]✓ Config and system are now in sync![/bold green]")
+            elif applied:
+                self.console.print("[yellow]⚠ Applied but values still differ - the setting may take time to update[/yellow]")
 
         self.console.input("\nPress Enter to continue...")
 
@@ -644,6 +858,7 @@ class MacConfigurator:
         self.console.print(Panel.fit("[bold cyan]Applying Settings[/bold cyan]", box=box.DOUBLE))
 
         # Collect settings that need to be applied
+        # Only apply settings that are explicitly configured (not None)
         to_apply = []
         skipped_admin = []
         for category_name, settings in self.categories.items():
@@ -651,6 +866,7 @@ class MacConfigurator:
                 configured_value = self.config_manager.get_setting(setting_key)
                 current_value = setting_info['get_current']()
 
+                # Only apply if explicitly configured and different from current
                 if configured_value is not None and configured_value != current_value:
                     # Check if requires admin
                     if setting_info.get('requires_admin', False) and not self.is_admin:
