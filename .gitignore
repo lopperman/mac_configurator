@@ -2,7 +2,8 @@
 *.scpt
 
 # User configuration
-config.json
+*_config.json
+.userConfig
 
 # Python
 __pycache__/

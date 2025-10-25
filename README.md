@@ -4,6 +4,7 @@ Interactive Python utility to manage and apply Mac system settings with a beauti
 
 ## Features
 
+- **Multiple Configurations**: Create and manage different configuration profiles (Work, Home, Presentation, etc.)
 - **Schema-Based Settings**: All settings defined with JSON Schema validation
 - **Explicit Configuration**: Only apply settings you've explicitly configured
 - **Live System Values**: Always see your configured value vs. actual system state
@@ -89,11 +90,23 @@ python3 mac_configurator.py
 python3 mac_configurator.py
 ```
 
-The interactive menu provides:
+On first run, you'll see the **Configuration Management** screen:
+
+**If no configurations exist:**
+- Create New Config
+- Exit
+
+**If configurations exist:**
+- Select a configuration to edit (by number)
+- Create New Config
+- Delete a Config
+- Exit
+
+Once you select or create a configuration, you'll enter the **Settings Management** screen with:
 1. **Manage Settings** - Browse by category, view/edit individual settings
 2. **Apply Settings Now** - Apply all configured settings to your system
-3. **Generate AppleScript** - Create a startup/ad-hoc script
-4. **Exit**
+3. **Generate AppleScript** - Create a startup/ad-hoc script for this config
+4. **Exit** (returns to Configuration Management)
 
 ### Workflow
 
@@ -135,33 +148,76 @@ The interactive menu provides:
 **Admin users:**
 - Can apply all settings without restrictions
 
+### Multiple Configurations
+
+Create different configuration profiles for different scenarios:
+
+**Example Use Cases:**
+- **Work**: WiFi on, volume at 50%, Dock on bottom
+- **Home**: WiFi on, volume at 75%, Dock auto-hide enabled
+- **Presentation**: WiFi off, volume at 100%, Dock hidden, show all extensions
+
+**Creating a New Config:**
+1. Launch the configurator
+2. Select "Create New Config" (or press 'c')
+3. Enter a name (letters, numbers, spaces, hyphens, underscores allowed)
+4. Configure your settings
+5. The config is automatically saved
+
+**Switching Between Configs:**
+- Exit to the main menu (press 'e')
+- Select a different configuration by number
+- Your settings are automatically loaded
+
+**Deleting a Config:**
+1. From the main menu, press 'd'
+2. Select the config number to delete
+3. Confirm deletion
+
 ### Command-line Mode
 
-Apply settings without interaction (used by generated AppleScript):
+Apply settings for a specific configuration without interaction (used by generated AppleScript):
 
 ```bash
+# Apply specific config
+python3 mac_configurator.py --apply "Work"
+
+# Apply first available config (if config name not specified)
 python3 mac_configurator.py --apply
 ```
 
 ### Generated AppleScript
 
-Use option 3 in the interactive menu to generate `apply_settings.scpt`.
+Use option 3 in the interactive menu to generate a config-specific AppleScript (e.g., `apply_Work_settings.scpt`).
+
+**Script Location:**
+AppleScripts are saved in the config directory alongside your configuration files:
+- Default: `~/MacConfigurator/apply_[ConfigName]_settings.scpt`
 
 **Run manually:**
 ```bash
-osascript apply_settings.scpt
+osascript ~/MacConfigurator/apply_Work_settings.scpt
 ```
 
 **Add to Login Items:**
 1. Open System Settings > General > Login Items
 2. Click '+' under 'Open at Login'
-3. Select the generated `apply_settings.scpt` file
+3. Navigate to `~/MacConfigurator/`
+4. Select the generated script (e.g., `apply_Work_settings.scpt`)
+
+Each configuration can have its own AppleScript for different startup scenarios. All files stay organized in one directory.
 
 ## Configuration
 
 ### Architecture
 
-The configurator uses a **schema-first architecture** with two key files:
+The configurator uses a **schema-first architecture** with multiple configuration files:
+
+**`.userConfig`** - Stores the configuration directory path
+- Created automatically on first run
+- Default location: `~/MacConfigurator`
+- Contains JSON: `{"config_directory": "/path/to/configs"}`
+- Excluded from git (in .gitignore)
 
 **`settings_schema.json`** - Defines all available settings
 - JSON Schema definitions with validation rules
@@ -169,33 +225,70 @@ The configurator uses a **schema-first architecture** with two key files:
 - Metadata (title, description, category, handler, admin requirements)
 - This file defines what CAN be configured
 
-**`config.json`** - Stores only explicitly configured settings
-- Contains ONLY settings the user has set
-- Settings not in this file use system defaults
+**`[config_name]_config.json`** - Individual configuration files
+- Stored in the directory specified by `.userConfig`
+- Each config file contains ONLY explicitly configured settings
+- Settings not in a config file use system defaults
 - Can be empty or partial - perfectly valid!
-- This file defines what the user HAS configured
+- File naming: `Work_config.json`, `Home_config.json`, etc.
 
-### Example config.json
+### File Locations
 
+```
+Project Directory:
+├── .userConfig                          # Config directory path
+├── settings_schema.json                 # Settings definitions
+└── mac_configurator.py                  # Main application
+
+~/MacConfigurator/ (default config directory):
+├── Work_config.json                     # Work configuration
+├── Home_config.json                     # Home configuration
+├── Presentation_config.json             # Presentation configuration
+├── apply_Work_settings.scpt             # Generated AppleScript for Work
+├── apply_Home_settings.scpt             # Generated AppleScript for Home
+└── apply_Presentation_settings.scpt     # Generated AppleScript for Presentation
+```
+
+### Example Configuration File
+
+**`Work_config.json`:**
 ```json
 {
   "settings": {
-    "audio_output_volume": 75,
-    "dock_position": "left",
-    "finder_show_extensions": true
+    "audio_output_volume": 50,
+    "dock_position": "bottom",
+    "wifi_enabled": true
   }
 }
 ```
 
-Note: Only 3 settings configured here. All other settings will use system defaults and won't be applied.
+**`Presentation_config.json`:**
+```json
+{
+  "settings": {
+    "audio_output_volume": 100,
+    "dock_autohide": true,
+    "wifi_enabled": false
+  }
+}
+```
+
+Note: Only configured settings appear in each file. All other settings use system defaults and won't be applied.
 
 ### Validation
 
+**Settings Validation:**
 All settings are validated against `settings_schema.json`:
 - Type checking (boolean, integer, string, enum)
 - Range validation (e.g., volume 0-100)
 - Enum validation (e.g., dock position must be left/bottom/right)
 - Invalid values are rejected with clear error messages
+
+**Config Name Validation:**
+Configuration names must:
+- Contain only letters, numbers, spaces, hyphens, and underscores
+- Not be empty
+- Be unique (no duplicate config names)
 
 ## Requirements
 
@@ -324,9 +417,12 @@ If you're using Claude Code, these rules will be automatically applied.
 
 ## Notes
 
+- **Multiple configs**: Each configuration is completely independent
+- **Config directory**: Stored in `~/MacConfigurator` by default (customizable via `.userConfig`)
 - Settings marked with 🔒 require admin privileges to apply
 - Dock and Finder settings automatically restart their respective applications
 - Screenshot location changes take effect immediately
 - WiFi changes may require admin authentication
-- Settings only apply if you've explicitly configured them
+- Settings only apply if you've explicitly configured them in that specific config
 - You can delete/unset settings to return to system defaults
+- Each configuration can have its own AppleScript for automatic application

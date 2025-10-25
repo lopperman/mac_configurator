@@ -34,12 +34,99 @@ def is_admin():
         return False
 
 
+class UserConfigPathManager:
+    """Manages user configuration path preferences"""
+
+    def __init__(self, config_file='.userConfig'):
+        self.config_file = Path(config_file)
+        self.config_dir = self._load_or_create_config_path()
+
+    def _get_default_config_dir(self):
+        """Get the default configuration directory"""
+        user_home = Path.home()
+        return user_home / 'MacConfigurator'
+
+    def _load_or_create_config_path(self):
+        """Load config path from .userConfig or create with default"""
+        if self.config_file.exists():
+            try:
+                with open(self.config_file, 'r') as f:
+                    config_data = json.load(f)
+                    config_path = Path(config_data.get('config_directory', self._get_default_config_dir()))
+            except (json.JSONDecodeError, KeyError):
+                # If file is corrupted, use default
+                config_path = self._get_default_config_dir()
+        else:
+            # Create .userConfig with default path
+            config_path = self._get_default_config_dir()
+            self._save_config_path(config_path)
+
+        # Ensure the directory exists
+        config_path.mkdir(parents=True, exist_ok=True)
+        return config_path
+
+    def _save_config_path(self, path):
+        """Save config path to .userConfig"""
+        with open(self.config_file, 'w') as f:
+            json.dump({'config_directory': str(path)}, f, indent=2)
+
+    def get_config_dir(self):
+        """Get the current configuration directory"""
+        return self.config_dir
+
+    def set_config_dir(self, path):
+        """Set a new configuration directory"""
+        new_path = Path(path)
+        new_path.mkdir(parents=True, exist_ok=True)
+        self.config_dir = new_path
+        self._save_config_path(new_path)
+
+    def list_config_files(self):
+        """List all config files in the config directory"""
+        config_files = list(self.config_dir.glob('*_config.json'))
+        # Extract config names from filenames
+        configs = []
+        for config_file in config_files:
+            # Remove '_config.json' suffix to get config name
+            name = config_file.stem.replace('_config', '')
+            configs.append({'name': name, 'path': config_file})
+        return sorted(configs, key=lambda x: x['name'])
+
+    def get_config_path(self, config_name):
+        """Get the full path for a config file by name"""
+        return self.config_dir / f"{config_name}_config.json"
+
+    def config_exists(self, config_name):
+        """Check if a config file exists"""
+        return self.get_config_path(config_name).exists()
+
+    def validate_config_name(self, config_name):
+        """Validate config name contains only safe filename characters"""
+        import re
+        # Allow alphanumeric, spaces, hyphens, underscores
+        if not re.match(r'^[a-zA-Z0-9 _-]+$', config_name):
+            return False, "Config name can only contain letters, numbers, spaces, hyphens, and underscores"
+        if not config_name.strip():
+            return False, "Config name cannot be empty"
+        return True, ""
+
+    def delete_config(self, config_name):
+        """Delete a config file"""
+        config_path = self.get_config_path(config_name)
+        if config_path.exists():
+            config_path.unlink()
+            return True
+        return False
+
+
 class ConfigManager:
     """Manages configuration file operations with schema validation"""
 
-    def __init__(self, config_path='config.json', schema_path='settings_schema.json'):
+    def __init__(self, config_path, schema_path='settings_schema.json'):
         self.config_path = Path(config_path)
         self.schema_path = Path(schema_path)
+        # Extract config name from path (remove '_config.json' suffix)
+        self.config_name = self.config_path.stem.replace('_config', '')
         self.schema = self.load_schema()
         self.config = self.load_config()
 
@@ -407,9 +494,12 @@ class SystemHandler:
 class MacConfigurator:
     """Main application class"""
 
-    def __init__(self):
+    def __init__(self, config_name, path_manager):
         self.console = Console()
-        self.config_manager = ConfigManager()
+        self.config_name = config_name
+        self.path_manager = path_manager
+        config_path = path_manager.get_config_path(config_name)
+        self.config_manager = ConfigManager(config_path)
         self.is_admin = is_admin()
 
         # Handlers
@@ -855,7 +945,7 @@ class MacConfigurator:
     def apply_settings(self):
         """Apply configured settings to the system"""
         self.console.clear()
-        self.console.print(Panel.fit("[bold cyan]Applying Settings[/bold cyan]", box=box.DOUBLE))
+        self.console.print(Panel.fit(f"[bold cyan]Applying Settings - {self.config_name}[/bold cyan]", box=box.DOUBLE))
 
         # Collect settings that need to be applied
         # Only apply settings that are explicitly configured (not None)
@@ -937,14 +1027,14 @@ class MacConfigurator:
         """Generate an AppleScript that can be run at startup or ad-hoc"""
         self.console.clear()
 
-        script_content = '''#!/usr/bin/osascript
+        script_content = f'''#!/usr/bin/osascript
 # Mac System Configurator - Auto-apply Script
-# This script applies configured system settings
+# This script applies configured system settings for: {self.config_name}
 
-do shell script "python3 ''' + str(Path.cwd() / 'mac_configurator.py') + ''' --apply" with administrator privileges
+do shell script "python3 {str(Path.cwd() / 'mac_configurator.py')} --apply '{self.config_name}'" with administrator privileges
 '''
 
-        script_path = Path.cwd() / 'apply_settings.scpt'
+        script_path = self.path_manager.get_config_dir() / f'apply_{self.config_name}_settings.scpt'
         with open(script_path, 'w') as f:
             f.write(script_content)
 
@@ -968,8 +1058,8 @@ do shell script "python3 ''' + str(Path.cwd() / 'mac_configurator.py') + ''' --a
         while True:
             self.console.clear()
 
-            # Create main menu
-            title = Text("Mac System Configurator", style="bold cyan", justify="center")
+            # Create main menu with config name
+            title = Text(f"Mac System Configurator - {self.config_name}", style="bold cyan", justify="center")
             self.console.print(Panel(title, box=box.DOUBLE, border_style="cyan"))
 
             table = Table(show_header=False, box=box.ROUNDED, padding=(0, 2))
@@ -1000,17 +1090,221 @@ do shell script "python3 ''' + str(Path.cwd() / 'mac_configurator.py') + ''' --a
                 break
 
 
+class ConfigSelector:
+    """Handles config file selection and management"""
+
+    def __init__(self):
+        self.console = Console()
+        self.path_manager = UserConfigPathManager()
+
+    def run(self):
+        """Main config selection menu"""
+        while True:
+            self.console.clear()
+
+            # List available configs
+            configs = self.path_manager.list_config_files()
+
+            # Create title
+            title = Text("Mac System Configurator", style="bold cyan", justify="center")
+            self.console.print(Panel(title, box=box.DOUBLE, border_style="cyan"))
+
+            if not configs:
+                # No configs exist - only show create and exit
+                self.console.print()
+                self.console.print(Panel(
+                    "[yellow]No configurations found.[/yellow]\n\n"
+                    "Create your first configuration to get started.",
+                    border_style="yellow",
+                    box=box.ROUNDED
+                ))
+                self.console.print()
+
+                table = Table(show_header=False, box=box.ROUNDED, padding=(0, 2))
+                table.add_column("Option", style="cyan", width=8)
+                table.add_column("Description", style="bright_white")
+                table.add_row("[1]", "Create New Config")
+                table.add_row(r"\[e]", "Exit")
+                self.console.print(table)
+
+                choice = Prompt.ask(
+                    "\n[bold]Select option[/bold]",
+                    choices=["1", "e"],
+                    show_choices=False
+                )
+
+                if choice == '1':
+                    self._create_config()
+                elif choice == 'e':
+                    self.console.print("\n[cyan]Goodbye![/cyan]\n")
+                    break
+            else:
+                # Show available configs and options
+                self.console.print()
+                self.console.print(f"[dim]Config directory: {self.path_manager.get_config_dir()}[/dim]")
+                self.console.print()
+
+                # List configs
+                config_table = Table(title="[bold]Available Configurations[/bold]", box=box.ROUNDED)
+                config_table.add_column("#", style="cyan", width=5)
+                config_table.add_column("Config Name", style="bright_white")
+
+                for idx, config in enumerate(configs, 1):
+                    config_table.add_row(str(idx), config['name'])
+
+                self.console.print(config_table)
+                self.console.print()
+
+                # Options menu
+                table = Table(show_header=False, box=box.ROUNDED, padding=(0, 2))
+                table.add_column("Option", style="cyan", width=8)
+                table.add_column("Description", style="bright_white")
+
+                # Dynamically show the correct range based on number of configs
+                if len(configs) == 1:
+                    config_range = "[1]"
+                else:
+                    config_range = f"[1-{len(configs)}]"
+
+                table.add_row(config_range, "Edit Config (select number)")
+                table.add_row("[c]", "Create New Config")
+                table.add_row("[d]", "Delete a Config")
+                table.add_row(r"\[e]", "Exit")
+                self.console.print(table)
+
+                choice = Prompt.ask(
+                    "\n[bold]Select option[/bold]",
+                    show_choices=False
+                )
+
+                if choice.isdigit():
+                    config_idx = int(choice) - 1
+                    if 0 <= config_idx < len(configs):
+                        self._edit_config(configs[config_idx]['name'])
+                    else:
+                        self.console.print("[red]Invalid config number[/red]")
+                        self.console.input("\nPress Enter to continue...")
+                elif choice.lower() == 'c':
+                    self._create_config()
+                elif choice.lower() == 'd':
+                    self._delete_config(configs)
+                elif choice.lower() == 'e':
+                    self.console.print("\n[cyan]Goodbye![/cyan]\n")
+                    break
+
+    def _create_config(self):
+        """Create a new configuration"""
+        self.console.print()
+        self.console.print(Panel(
+            "[bold cyan]Create New Configuration[/bold cyan]",
+            border_style="cyan",
+            box=box.ROUNDED
+        ))
+        self.console.print()
+
+        while True:
+            config_name = Prompt.ask("[cyan]Enter configuration name[/cyan]")
+
+            # Validate name
+            valid, error_msg = self.path_manager.validate_config_name(config_name)
+            if not valid:
+                self.console.print(f"[red]✗ {error_msg}[/red]")
+                continue
+
+            # Check if already exists
+            if self.path_manager.config_exists(config_name):
+                self.console.print(f"[red]✗ Config '{config_name}' already exists[/red]")
+                continue
+
+            # Create the config file
+            config_path = self.path_manager.get_config_path(config_name)
+            config_manager = ConfigManager(config_path)
+            config_manager.save_config()  # Save empty config
+
+            self.console.print(f"\n[green]✓ Created config: {config_name}[/green]")
+            self.console.input("\nPress Enter to continue...")
+            break
+
+    def _delete_config(self, configs):
+        """Delete a configuration"""
+        self.console.print()
+        self.console.print(Panel(
+            "[bold red]Delete Configuration[/bold red]",
+            border_style="red",
+            box=box.ROUNDED
+        ))
+        self.console.print()
+
+        # Show configs to delete
+        config_table = Table(box=box.ROUNDED)
+        config_table.add_column("#", style="cyan", width=5)
+        config_table.add_column("Config Name", style="bright_white")
+
+        for idx, config in enumerate(configs, 1):
+            config_table.add_row(str(idx), config['name'])
+
+        self.console.print(config_table)
+        self.console.print()
+
+        choice = Prompt.ask(
+            "[yellow]Select config number to delete (or press Enter to cancel)[/yellow]",
+            default=""
+        )
+
+        if not choice:
+            return
+
+        if choice.isdigit():
+            config_idx = int(choice) - 1
+            if 0 <= config_idx < len(configs):
+                config_name = configs[config_idx]['name']
+
+                # Confirm deletion
+                if Confirm.ask(f"\n[red]Are you sure you want to delete '{config_name}'?[/red]", default=False):
+                    if self.path_manager.delete_config(config_name):
+                        self.console.print(f"\n[green]✓ Deleted config: {config_name}[/green]")
+                    else:
+                        self.console.print(f"\n[red]✗ Failed to delete config[/red]")
+                else:
+                    self.console.print("\n[dim]Cancelled[/dim]")
+            else:
+                self.console.print("[red]Invalid config number[/red]")
+        else:
+            self.console.print("[red]Invalid input[/red]")
+
+        self.console.input("\nPress Enter to continue...")
+
+    def _edit_config(self, config_name):
+        """Edit a configuration"""
+        configurator = MacConfigurator(config_name, self.path_manager)
+        configurator.run_interactive_menu()
+
+
 def main():
     import sys
 
+    # Initialize path manager
+    path_manager = UserConfigPathManager()
+
     # Check if running in --apply mode (for AppleScript)
     if len(sys.argv) > 1 and sys.argv[1] == '--apply':
-        configurator = MacConfigurator()
+        # In apply mode, check if a config name is provided
+        if len(sys.argv) > 2:
+            config_name = sys.argv[2]
+        else:
+            # Default to first available config, or error if none exist
+            configs = path_manager.list_config_files()
+            if not configs:
+                print("Error: No configurations found. Create a config first.")
+                sys.exit(1)
+            config_name = configs[0]['name']
+
+        configurator = MacConfigurator(config_name, path_manager)
         configurator.apply_settings()
     else:
-        # Run interactive menu
-        configurator = MacConfigurator()
-        configurator.run_interactive_menu()
+        # Run config selector
+        selector = ConfigSelector()
+        selector.run()
 
 
 if __name__ == '__main__':
