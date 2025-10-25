@@ -40,7 +40,7 @@ Interactive Python utility to manage and apply Mac system settings with a beauti
 The configurator features a beautiful, color-coded Rich terminal interface:
 
 ### Main Menu
-![Main Menu](screenshots/main_menu.png)
+![Main Menu](screenshots/main_menuv2.png)
 
 The main menu provides quick access to all functionality with a clean, numbered interface.
 
