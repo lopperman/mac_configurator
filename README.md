@@ -30,24 +30,18 @@ Interactive Python utility to manage and apply Mac system settings with a beauti
 ### System
 - **Screenshot Location** (string) - Directory path for saving screenshots
 
-## UI Examples
+## Screenshots
 
-The configurator features a beautiful, color-coded terminal interface:
+The configurator features a beautiful, color-coded Rich terminal interface:
 
 ### Main Menu
-```
-╔══════════════════════════════════════════════════════════════════════════════╗
-║                           Mac System Configurator                            ║
-╚══════════════════════════════════════════════════════════════════════════════╝
-╭────────────┬────────────────────────╮
-│  [1]       │  Manage Settings       │
-│  [2]       │  Apply Settings Now    │
-│  [3]       │  Generate AppleScript  │
-│  [e]       │  Exit                  │
-╰────────────┴────────────────────────╯
-```
+![Main Menu](screenshots/main_menu.png)
 
-### Category Selection
+The main menu provides quick access to all functionality with a clean, numbered interface.
+
+### Manage Settings - Category Selection
+![Manage Settings](screenshots/manage_settings.png)
+
 Categories are color-coded with icons for easy identification:
 - 🌐 **Network** (blue)
 - 🔊 **Audio** (magenta)
@@ -55,53 +49,20 @@ Categories are color-coded with icons for easy identification:
 - 📁 **Finder** (green)
 - ⚙️ **System** (yellow)
 
-### Settings View
-```
-      Audio Settings
-╭──────────┬──────────────┬─────────────┬─────────────┬──────────╮
-│ Option   │ Setting      │ Configured  │ Current     │  Status  │
-├──────────┼──────────────┼─────────────┼─────────────┼──────────┤
-│ [1]      │ Input Muted  │ false       │ false       │    ✓     │
-│ [2]      │ Output Vol.  │ 75          │ 50          │    ⚠     │
-╰──────────┴──────────────┴─────────────┴─────────────┴──────────╯
-```
+### Finder Settings View
+![Finder Settings](screenshots/finder_settings.png)
 
-**Color Coding:**
+Settings are displayed in a clear table showing:
 - **Yellow** = Configured values
 - **Magenta** = Current system values
-- **Green ✓** = Matched (dim when in sync)
-- **Yellow ⚠** = Mismatched (bold when different)
-- **Red 🔒** = Admin required
+- **Green ✓** = Matched (settings in sync)
+- **Yellow ⚠** = Mismatched (needs attention)
+- **Red 🔒** = Requires admin privileges
 
-### Admin Warning (Non-admin users)
-```
-╭────────────────────────────────────────────────────────────────╮
-│  ⚠  Admin Privileges Required                                 │
-│                                                                 │
-│  You are not running as administrator. Settings marked with    │
-│  🔒 will not be applied.                                       │
-│  To apply these settings, run the script with sudo or as an    │
-│  admin user.                                                    │
-╰────────────────────────────────────────────────────────────────╯
-```
+### AppleScript Generation
+![AppleScript Generated](screenshots/applescript_generated.png)
 
-### Apply Settings
-```
-╔═══════════════════╗
-║ Applying Settings ║
-╚═══════════════════╝
-
-→ Applying 2 setting(s)...
-
-  • Input Muted → true ✓
-  • Output Volume → 75 ✓
-
-╭────────────────────────────────────────╮
-│  ✓  Successfully Applied All Settings  │
-│                                         │
-│  2 setting(s) updated                  │
-╰────────────────────────────────────────╯
-```
+Generate an AppleScript file that can be run at startup or on-demand to automatically apply all configured settings.
 
 ## Installation
 
