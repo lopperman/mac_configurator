@@ -1,0 +1,175 @@
+# Claude Code Project Instructions for Mac Configurator
+
+## Project Overview
+This is a Mac system configurator tool that allows users to manage macOS settings through an interactive CLI interface. The project uses JSON schema validation for settings and maintains separation between available settings (schema) and configured settings (config).
+
+## Core Architecture
+- **settings_schema.json**: Defines all available settings with JSON Schema validation
+- **config.json**: Contains only explicitly configured user settings
+- **mac_configurator.py**: Main application with handlers for each system setting type
+- Settings only apply if explicitly configured by the user
+- Users can delete/unset settings to return to system defaults
+
+## Mandatory Rules
+
+### 1. README Updates
+**ALWAYS check and update README.md after making changes:**
+- ✅ When adding new features or settings
+- ✅ When changing command-line options or usage
+- ✅ When modifying the configuration file structure
+- ✅ When adding/removing dependencies
+- ✅ When changing installation steps
+
+Before completing any task, explicitly verify:
+1. Does this change affect user-facing functionality?
+2. Does README.md document this change?
+3. If not, update README.md with clear examples
+
+### 2. Schema-First Development
+When adding new settings:
+1. **FIRST**: Update `settings_schema.json` with proper validation rules
+2. **SECOND**: Add handler methods to appropriate handler class
+3. **THIRD**: Add to handler_methods mapping in MacConfigurator.__init__
+4. Test validation works before declaring complete
+
+### 3. JSON Schema Validation
+- All settings must have JSON Schema definitions
+- Validate types: boolean, integer (with min/max), string, enum
+- Include metadata: title, description, category, handler, requires_admin
+- Never bypass schema validation
+
+### 4. Explicit Configuration Only
+- Only apply settings that are explicitly configured in config.json
+- Never apply settings where user hasn't set a value
+- Use `has_setting()` to check if configured, not just checking for None
+- Support delete/unset functionality for all settings
+
+### 5. Live System Values
+- Always show current live system values when displaying settings
+- Handlers should gracefully handle failures and return None
+- Display "N/A" when system values cannot be read
+- Never assume system state - always query handlers
+
+### 6. Error Handling
+- Validate all user input before saving to config
+- Catch handler errors gracefully without crashing
+- Show helpful error messages, not stack traces
+- Silent failures for system queries, loud failures for user actions
+
+### 7. Testing After Changes
+After making code changes, ALWAYS test:
+```python
+# Basic smoke test
+python3 -c "from mac_configurator import MacConfigurator; m = MacConfigurator(); print('✓ OK')"
+
+# Schema validation test
+python3 -c "from mac_configurator import ConfigManager; cm = ConfigManager(); print('✓ Schema loaded')"
+```
+
+### 8. Dependencies
+Current dependencies (keep README in sync):
+- Python 3.7+
+- rich (for terminal UI)
+- jsonschema (for validation)
+
+When adding dependencies:
+1. Update requirements in README
+2. Add try/except import with helpful error message
+3. Test that error message is clear if dependency missing
+
+## Code Style Guidelines
+
+### Variable Naming
+- `current_value` = value from config.json (user's configured value)
+- `system_value` = live value from macOS system
+- `is_configured` = boolean for whether setting is in config.json
+- Be consistent with these names across the codebase
+
+### Handler Pattern
+All handler classes should follow this pattern:
+```python
+class XHandler:
+    @staticmethod
+    def get_current_state():
+        """Get current system state - returns None on failure"""
+        try:
+            # Query system
+            return value
+        except:
+            return None
+
+    @staticmethod
+    def set_value(value):
+        """Set system value - returns True/False"""
+        try:
+            # Apply to system
+            return True
+        except:
+            return False
+```
+
+### UI Consistency
+- Use Rich tables for data display
+- Color scheme: Yellow=configured, Magenta=system, Green=success, Red=error
+- Always show "Your Config" and "Live System" labels
+- Status symbols: ✓ (match), ⚠ (differ), ○ (not configured)
+
+## Common Tasks Checklist
+
+### Adding a New Setting
+- [ ] Update settings_schema.json with schema definition
+- [ ] Create or update appropriate handler class
+- [ ] Add to handler_methods mapping
+- [ ] Test schema validation (valid and invalid values)
+- [ ] Test handler can read current system value
+- [ ] Test handler can set system value
+- [ ] Update README with new setting documentation
+- [ ] Test end-to-end in interactive mode
+
+### Modifying Existing Settings
+- [ ] Check if schema needs updating
+- [ ] Check if handler methods need updating
+- [ ] Test backward compatibility with existing configs
+- [ ] Update README if user-facing behavior changed
+- [ ] Verify validation still works
+
+### Refactoring
+- [ ] Ensure schema-based architecture is preserved
+- [ ] Test all handlers still work
+- [ ] Verify config.json format unchanged (or migrate gracefully)
+- [ ] Update README if architecture changed
+- [ ] Run full integration test
+
+## Git Commit Messages
+Follow conventional commits format:
+- `feat: add new setting for X`
+- `fix: correct validation for Y`
+- `docs: update README with Z`
+- `refactor: improve handler architecture`
+- `test: add validation tests`
+
+## Questions to Ask
+When requirements are unclear, ask:
+1. "Should this setting require admin privileges?"
+2. "What are the valid values/range for this setting?"
+3. "How should we handle system errors for this setting?"
+4. "Should README document this change?"
+
+## File Organization
+```
+mac_start/
+├── .clinerules              # This file - project instructions
+├── README.md                # User documentation (keep updated!)
+├── settings_schema.json     # JSON Schema for all settings
+├── config.json              # User's configured settings
+├── mac_configurator.py      # Main application
+└── apply_settings.scpt      # AppleScript for startup
+```
+
+## Final Checklist Before Completing Any Task
+- [ ] Code works and is tested
+- [ ] Schema validation tested (if applicable)
+- [ ] README.md is updated (if user-facing change)
+- [ ] No variable naming inconsistencies
+- [ ] Error handling is graceful
+- [ ] Live system values are properly displayed

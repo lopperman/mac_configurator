@@ -1,9 +1,13 @@
 # Mac System Configurator
 
-Interactive Python utility to manage and apply Mac system settings with a beautiful Rich-powered terminal UI.
+Interactive Python utility to manage and apply Mac system settings with a beautiful Rich-powered terminal UI and JSON Schema validation.
 
 ## Features
 
+- **Schema-Based Settings**: All settings defined with JSON Schema validation
+- **Explicit Configuration**: Only apply settings you've explicitly configured
+- **Live System Values**: Always see your configured value vs. actual system state
+- **Delete/Unset Settings**: Remove settings to return to system defaults
 - **Manage Settings**: Browse settings by category with visual status indicators
 - **Apply Settings**: Apply configured settings to your Mac (with admin permission handling)
 - **Generate AppleScript**: Create a script for startup or ad-hoc execution
@@ -53,10 +57,11 @@ Categories are color-coded with icons for easy identification:
 ![Finder Settings](screenshots/finder_settings.png)
 
 Settings are displayed in a clear table showing:
-- **Yellow** = Configured values
-- **Magenta** = Current system values
+- **Your Config** (Yellow) = Your configured values
+- **Live System** (Magenta) = Current actual system values
 - **Green ✓** = Matched (settings in sync)
-- **Yellow ⚠** = Mismatched (needs attention)
+- **Yellow ⚠** = Mismatched (configured value differs from system)
+- **Dim ○** = Not configured (using system defaults)
 - **Red 🔒** = Requires admin privileges
 
 ### AppleScript Generation
@@ -68,7 +73,7 @@ Generate an AppleScript file that can be run at startup or on-demand to automati
 
 1. Install dependencies:
 ```bash
-pip3 install rich
+pip3 install rich jsonschema
 ```
 
 2. Run the configurator:
@@ -92,16 +97,30 @@ The interactive menu provides:
 
 ### Workflow
 
+**Viewing Settings:**
+- When you select a setting, you'll see:
+  - **Your Config**: The value you've configured (or "Not configured")
+  - **Live System**: The actual current value on your Mac
+  - Helpful indicators showing if values match or differ
+
+**When Values Differ:**
+- If your configured value differs from the live system value:
+  - You'll be prompted: "Apply this setting now? (y/n) [n]:"
+  - Press Enter to skip, or type 'y' to apply immediately
+  - After applying, you'll see refreshed status
+
 **Editing Settings:**
 1. Select "Manage Settings"
 2. Choose a category (Network, Audio, Dock, etc.)
-3. Select a setting to edit
-4. Enter new value
-5. Optionally apply immediately (type 'y') or press Enter to skip
+3. Select a setting to view/edit
+4. If configured value differs from system, optionally apply it
+5. You can delete configured settings to "unset" them
+6. Enter new value if desired
+7. Optionally apply immediately or press Enter to skip
 
 **Applying Settings:**
 - From main menu, select "Apply Settings Now"
-- All settings that differ from system state will be applied
+- Only explicitly configured settings that differ from system state will be applied
 - Settings requiring admin privileges are automatically skipped for non-admin users
 
 ### Admin Permission Handling
@@ -140,48 +159,149 @@ osascript apply_settings.scpt
 
 ## Configuration
 
-Settings are stored in `config.json`:
+### Architecture
+
+The configurator uses a **schema-first architecture** with two key files:
+
+**`settings_schema.json`** - Defines all available settings
+- JSON Schema definitions with validation rules
+- Type constraints (boolean, integer with min/max, enum, string)
+- Metadata (title, description, category, handler, admin requirements)
+- This file defines what CAN be configured
+
+**`config.json`** - Stores only explicitly configured settings
+- Contains ONLY settings the user has set
+- Settings not in this file use system defaults
+- Can be empty or partial - perfectly valid!
+- This file defines what the user HAS configured
+
+### Example config.json
 
 ```json
 {
   "settings": {
-    "wifi_enabled": true,
-    "audio_input_muted": false,
-    "audio_output_volume": 50,
-    "dock_autohide": false,
-    "dock_position": "bottom",
-    "finder_show_hidden": false,
-    "finder_show_extensions": true,
-    "screenshot_location": "~/Desktop"
+    "audio_output_volume": 75,
+    "dock_position": "left",
+    "finder_show_extensions": true
   }
 }
 ```
 
+Note: Only 3 settings configured here. All other settings will use system defaults and won't be applied.
+
+### Validation
+
+All settings are validated against `settings_schema.json`:
+- Type checking (boolean, integer, string, enum)
+- Range validation (e.g., volume 0-100)
+- Enum validation (e.g., dock position must be left/bottom/right)
+- Invalid values are rejected with clear error messages
+
 ## Requirements
 
 - macOS
-- Python 3.x
+- Python 3.7+
 - [Rich](https://github.com/Textualize/rich) library (`pip3 install rich`)
+- [jsonschema](https://pypi.org/project/jsonschema/) library (`pip3 install jsonschema`)
 - Administrator privileges (only for certain settings like WiFi control)
 
 ## Adding New Settings
 
-The configurator is designed to be easily extensible:
+The configurator uses a **schema-first approach** for easy extensibility:
 
-1. **Create a handler class** with `get_` and `set_` methods
-2. **Add to categories dictionary** in `MacConfigurator.__init__()`:
-   ```python
-   'category_name': {
-       'setting_key': {
-           'name': 'Display Name',
-           'type': 'boolean',  # or 'integer', 'choice', 'string'
-           'get_current': handler.get_method,
-           'set_value': handler.set_method,
-           'requires_admin': False  # or True
-       }
-   }
-   ```
-3. **Add default value** to `config.json`
+### Step 1: Update `settings_schema.json`
+
+Add your setting definition with JSON Schema validation:
+
+```json
+{
+  "properties": {
+    "settings": {
+      "properties": {
+        "your_setting_key": {
+          "type": "boolean",
+          "title": "Your Setting Name",
+          "description": "What this setting does",
+          "category": "CategoryName",
+          "handler": "YourHandler",
+          "requires_admin": false
+        }
+      }
+    }
+  }
+}
+```
+
+For integers, add `minimum` and `maximum`:
+```json
+{
+  "type": "integer",
+  "minimum": 0,
+  "maximum": 100
+}
+```
+
+For choices/enums:
+```json
+{
+  "type": "string",
+  "enum": ["option1", "option2", "option3"]
+}
+```
+
+### Step 2: Create Handler Class
+
+Create a handler with `get` and `set` methods:
+
+```python
+class YourHandler:
+    @staticmethod
+    def get_your_setting():
+        """Get current system state - returns None on failure"""
+        try:
+            # Query system using subprocess, defaults, etc.
+            return value
+        except:
+            return None
+
+    @staticmethod
+    def set_your_setting(value):
+        """Set system value - returns True/False"""
+        try:
+            # Apply to system
+            return True
+        except:
+            return False
+```
+
+### Step 3: Register Handler
+
+In `MacConfigurator.__init__()`:
+
+1. Instantiate your handler:
+```python
+self.your_handler = YourHandler()
+```
+
+2. Add to handler map:
+```python
+self.handler_map = {
+    'YourHandler': self.your_handler,
+    # ... other handlers
+}
+```
+
+3. Add to handler methods:
+```python
+self.handler_methods = {
+    'your_setting_key': ('get_your_setting', 'set_your_setting'),
+    # ... other methods
+}
+```
+
+That's it! The setting will automatically appear in the UI with validation.
+
+**Note:** You do NOT need to add defaults to `config.json`. Settings only appear there when users explicitly configure them.
 
 ## Setting Types
 
@@ -190,9 +310,23 @@ The configurator is designed to be easily extensible:
 - **choice**: Multiple choice selection from predefined options
 - **string**: Free text input (useful for paths, names, etc.)
 
+## Development
+
+### Claude Code Integration
+
+This project includes `.clinerules` - a project-specific instructions file for Claude Code that ensures:
+- README is updated after user-facing changes
+- Schema-first development is followed when adding settings
+- Proper testing and validation before completing tasks
+- Consistent code style and variable naming
+
+If you're using Claude Code, these rules will be automatically applied.
+
 ## Notes
 
 - Settings marked with 🔒 require admin privileges to apply
 - Dock and Finder settings automatically restart their respective applications
 - Screenshot location changes take effect immediately
 - WiFi changes may require admin authentication
+- Settings only apply if you've explicitly configured them
+- You can delete/unset settings to return to system defaults
