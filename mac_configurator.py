@@ -405,20 +405,30 @@ class MacConfigurator:
 
     def manage_settings(self):
         """Interactive settings manager with category navigation"""
+        # Category icons and colors
+        category_styles = {
+            'Network': ('🌐', 'blue'),
+            'Audio': ('🔊', 'magenta'),
+            'Dock': ('📱', 'cyan'),
+            'Finder': ('📁', 'green'),
+            'System': ('⚙️', 'yellow')
+        }
+
         while True:
             self.console.clear()
 
             # Create categories table
-            table = Table(title="Manage Settings - Select Category", box=box.ROUNDED, show_header=False)
-            table.add_column("Option", style="cyan", width=8)
-            table.add_column("Category", style="bright_white")
+            table = Table(title="[bold cyan]Manage Settings - Select Category[/bold cyan]", box=box.ROUNDED, show_header=False)
+            table.add_column("Option", style="bright_cyan", width=8)
+            table.add_column("Category", style="bright_white", width=30)
 
             category_list = list(self.categories.keys())
             for idx, category in enumerate(category_list, 1):
-                table.add_row(f"[{idx}]", category)
+                icon, color = category_styles.get(category, ('•', 'white'))
+                table.add_row(f"[{idx}]", f"{icon}  [{color}]{category}[/{color}]")
 
             self.console.print(table)
-            self.console.print("\n[dim]Press Enter to return to main menu[/dim]")
+            self.console.print("\n[dim italic]Press Enter to return to main menu[/dim italic]")
 
             choice = Prompt.ask(
                 f"\nSelect category",
@@ -449,45 +459,52 @@ class MacConfigurator:
             # Show admin status if not admin
             if not self.is_admin:
                 self.console.print(Panel(
-                    "[yellow]⚠[/yellow] You are not running as admin. Settings marked with [red]🔒[/red] will not be applied.",
+                    "[bold yellow]⚠  Admin Privileges Required[/bold yellow]\n\n"
+                    "You are not running as administrator. Settings marked with [red bold]🔒[/red bold] will not be applied.\n"
+                    "[dim]To apply these settings, run the script with sudo or as an admin user.[/dim]",
                     border_style="yellow",
-                    box=box.ROUNDED
+                    box=box.HEAVY
                 ))
                 self.console.print()
 
-            # Create settings table
-            table = Table(title=f"{category_name} Settings", box=box.ROUNDED)
-            table.add_column("Option", style="cyan", width=8)
+            # Create settings table with color-coded headers
+            table = Table(title=f"[bold bright_white]{category_name} Settings[/bold bright_white]", box=box.ROUNDED)
+            table.add_column("Option", style="bright_cyan bold", width=8)
             table.add_column("Setting", style="bright_white", width=25)
-            table.add_column("Configured", style="yellow", width=15)
-            table.add_column("Current", style="magenta", width=15)
-            table.add_column("Status", justify="center", width=8)
+            table.add_column("Configured", style="bright_yellow", width=15, header_style="bright_yellow bold")
+            table.add_column("Current", style="bright_magenta", width=15, header_style="bright_magenta bold")
+            table.add_column("Status", justify="center", width=8, header_style="bright_white bold")
 
             for idx, setting_key in enumerate(setting_keys, 1):
                 setting_info = settings[setting_key]
                 configured_value = self.config_manager.get_setting(setting_key)
                 current_value = setting_info['get_current']()
 
+                # Color-coded status with different symbols
                 if configured_value == current_value:
-                    status = "[green]✓[/green]"
+                    status = "[bold green]✓[/bold green]"
+                    configured_str = f"[dim]{configured_value}[/dim]"
+                    current_str = f"[dim]{current_value}[/dim]"
                 else:
-                    status = "[yellow]⚠[/yellow]"
+                    status = "[bold yellow]⚠[/bold yellow]"
+                    configured_str = f"[bold bright_yellow]{configured_value}[/bold bright_yellow]"
+                    current_str = f"[bold bright_magenta]{current_value}[/bold bright_magenta]"
 
                 # Add lock icon if requires admin and user is not admin
                 setting_name = setting_info['name']
                 if setting_info.get('requires_admin', False) and not self.is_admin:
-                    setting_name = f"{setting_name} [red]🔒[/red]"
+                    setting_name = f"{setting_name} [red bold]🔒[/red bold]"
 
                 table.add_row(
                     f"[{idx}]",
                     setting_name,
-                    str(configured_value),
-                    str(current_value),
+                    configured_str,
+                    current_str,
                     status
                 )
 
             self.console.print(table)
-            self.console.print("\n[dim]Press Enter to return to category menu[/dim]")
+            self.console.print("\n[dim italic]Press Enter to return to category menu[/dim italic]")
 
             choice = Prompt.ask(
                 "\nSelect setting to edit",
@@ -513,27 +530,42 @@ class MacConfigurator:
         system_value = setting_info['get_current']()
         requires_admin = setting_info.get('requires_admin', False)
 
-        self.console.print(f"\n[bold]{setting_info['name']}[/bold]")
+        # Display setting header with color-coded info
+        self.console.print()
+        self.console.print(Panel(
+            f"[bold bright_white]{setting_info['name']}[/bold bright_white]",
+            border_style="cyan",
+            box=box.ROUNDED
+        ))
+
         if requires_admin and not self.is_admin:
-            self.console.print("[red]🔒 Requires admin privileges[/red]")
-        self.console.print(f"  Configured: [yellow]{current_value}[/yellow]")
-        self.console.print(f"  System:     [magenta]{system_value}[/magenta]")
+            self.console.print("[red bold]🔒 Requires admin privileges[/red bold]")
+
+        # Show comparison in a mini table
+        comparison_table = Table(show_header=True, box=box.SIMPLE, padding=(0, 1))
+        comparison_table.add_column("Source", style="dim")
+        comparison_table.add_column("Value", style="bold")
+
+        comparison_table.add_row("Configured", f"[bright_yellow]{current_value}[/bright_yellow]")
+        comparison_table.add_row("System", f"[bright_magenta]{system_value}[/bright_magenta]")
+
+        self.console.print(comparison_table)
 
         new_value = None
         value_changed = False
 
         if setting_info['type'] == 'boolean':
             result = Confirm.ask(
-                f"\nSet {setting_info['name']} to",
+                f"\n[cyan]Set {setting_info['name']} to[/cyan]",
                 default=current_value if isinstance(current_value, bool) else True
             )
             if result != current_value:
                 self.config_manager.set_setting(setting_key, result)
-                self.console.print(f"[green]✓[/green] {setting_info['name']} set to [yellow]{result}[/yellow]")
+                self.console.print(f"\n[bold green]✓ Saved[/bold green] → [bright_yellow]{result}[/bright_yellow]")
                 new_value = result
                 value_changed = True
             else:
-                self.console.print(f"[dim]Value unchanged[/dim]")
+                self.console.print(f"\n[dim italic]→ Value unchanged[/dim italic]")
 
         elif setting_info['type'] == 'integer':
             min_val = setting_info.get('min', 0)
@@ -541,49 +573,49 @@ class MacConfigurator:
 
             try:
                 value = IntPrompt.ask(
-                    f"\nSet value ({min_val}-{max_val})",
+                    f"\n[cyan]Set value ({min_val}-{max_val})[/cyan]",
                     default=current_value if isinstance(current_value, int) else min_val
                 )
                 if min_val <= value <= max_val:
                     if value != current_value:
                         self.config_manager.set_setting(setting_key, value)
-                        self.console.print(f"[green]✓[/green] {setting_info['name']} set to [yellow]{value}[/yellow]")
+                        self.console.print(f"\n[bold green]✓ Saved[/bold green] → [bright_yellow]{value}[/bright_yellow]")
                         new_value = value
                         value_changed = True
                     else:
-                        self.console.print(f"[dim]Value unchanged[/dim]")
+                        self.console.print(f"\n[dim italic]→ Value unchanged[/dim italic]")
                 else:
-                    self.console.print(f"[red]✗[/red] Value must be between {min_val} and {max_val}")
+                    self.console.print(f"\n[bold red]✗ Error:[/bold red] Value must be between {min_val} and {max_val}")
             except (ValueError, KeyboardInterrupt):
-                self.console.print("[yellow]Cancelled[/yellow]")
+                self.console.print("\n[yellow]⚠ Cancelled[/yellow]")
 
         elif setting_info['type'] == 'choice':
             choices = setting_info.get('choices', [])
             result = Prompt.ask(
-                f"\nSelect {setting_info['name']}",
+                f"\n[cyan]Select {setting_info['name']}[/cyan]",
                 choices=choices,
                 default=current_value if current_value in choices else choices[0]
             )
             if result != current_value:
                 self.config_manager.set_setting(setting_key, result)
-                self.console.print(f"[green]✓[/green] {setting_info['name']} set to [yellow]{result}[/yellow]")
+                self.console.print(f"\n[bold green]✓ Saved[/bold green] → [bright_yellow]{result}[/bright_yellow]")
                 new_value = result
                 value_changed = True
             else:
-                self.console.print(f"[dim]Value unchanged[/dim]")
+                self.console.print(f"\n[dim italic]→ Value unchanged[/dim italic]")
 
         elif setting_info['type'] == 'string':
             result = Prompt.ask(
-                f"\nEnter {setting_info['name']}",
+                f"\n[cyan]Enter {setting_info['name']}[/cyan]",
                 default=str(current_value) if current_value else ""
             )
             if result != current_value:
                 self.config_manager.set_setting(setting_key, result)
-                self.console.print(f"[green]✓[/green] {setting_info['name']} set to [yellow]{result}[/yellow]")
+                self.console.print(f"\n[bold green]✓ Saved[/bold green] → [bright_yellow]{result}[/bright_yellow]")
                 new_value = result
                 value_changed = True
             else:
-                self.console.print(f"[dim]Value unchanged[/dim]")
+                self.console.print(f"\n[dim italic]→ Value unchanged[/dim italic]")
 
         # Check if we should apply the setting now
         if value_changed:
@@ -630,27 +662,57 @@ class MacConfigurator:
         if skipped_admin:
             self.console.print()
             self.console.print(Panel(
-                f"[yellow]⚠ Skipping {len(skipped_admin)} setting(s) that require admin privileges:[/yellow]\n" +
-                "\n".join([f"  • {info['name']}" for _, info, _ in skipped_admin]),
+                f"[bold yellow]⚠  Skipped - Admin Required[/bold yellow]\n\n" +
+                f"The following {len(skipped_admin)} setting(s) require admin privileges:\n\n" +
+                "\n".join([f"  [red]🔒[/red] {info['name']}" for _, info, _ in skipped_admin]) +
+                "\n\n[dim]Run with sudo or as admin to apply these settings.[/dim]",
                 border_style="yellow",
-                box=box.ROUNDED
+                box=box.HEAVY
             ))
 
         if not to_apply and not skipped_admin:
-            self.console.print("\n[green]✓[/green] All settings already match configured state!")
+            self.console.print()
+            self.console.print(Panel(
+                "[bold green]✓  All Settings Match[/bold green]\n\nNo changes needed - all settings already match configured state!",
+                border_style="green",
+                box=box.ROUNDED
+            ))
         elif not to_apply:
-            self.console.print("\n[yellow]No settings to apply (all require admin or match current state)[/yellow]")
+            self.console.print()
+            self.console.print("[yellow italic]No settings to apply (all require admin or match current state)[/yellow italic]")
         else:
-            self.console.print(f"\n[cyan]Applying {len(to_apply)} setting(s)...[/cyan]\n")
+            self.console.print(f"\n[bold bright_cyan]→ Applying {len(to_apply)} setting(s)...[/bold bright_cyan]\n")
 
             # Apply settings with progress tracking
+            success_count = 0
+            fail_count = 0
+
             for setting_key, setting_info, configured_value in to_apply:
-                self.console.print(f"Applying [bold]{setting_info['name']}[/bold]: [yellow]{configured_value}[/yellow]...", end=" ")
+                self.console.print(f"  [dim]•[/dim] [bold bright_white]{setting_info['name']}[/bold bright_white] → [bright_yellow]{configured_value}[/bright_yellow] ", end="")
 
                 if setting_info['set_value'](configured_value):
-                    self.console.print("[green]✓ Success[/green]")
+                    self.console.print("[bold green]✓[/bold green]")
+                    success_count += 1
                 else:
-                    self.console.print("[red]✗ Failed[/red]")
+                    self.console.print("[bold red]✗[/bold red]")
+                    fail_count += 1
+
+            # Summary
+            self.console.print()
+            if fail_count == 0:
+                self.console.print(Panel(
+                    f"[bold green]✓  Successfully Applied All Settings[/bold green]\n\n{success_count} setting(s) updated",
+                    border_style="green",
+                    box=box.ROUNDED
+                ))
+            else:
+                self.console.print(Panel(
+                    f"[bold yellow]⚠  Partial Success[/bold yellow]\n\n"
+                    f"[green]✓ Success:[/green] {success_count} setting(s)\n"
+                    f"[red]✗ Failed:[/red] {fail_count} setting(s)",
+                    border_style="yellow",
+                    box=box.ROUNDED
+                ))
 
         self.console.print()
         self.console.input("Press Enter to continue...")
@@ -701,7 +763,7 @@ do shell script "python3 ''' + str(Path.cwd() / 'mac_configurator.py') + ''' --a
             table.add_row("[1]", "Manage Settings")
             table.add_row("[2]", "Apply Settings Now")
             table.add_row("[3]", "Generate AppleScript")
-            table.add_row("[e]", "Exit")
+            table.add_row(r"\[e]", "Exit")
 
             self.console.print(table)
 
