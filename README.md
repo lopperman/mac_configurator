@@ -82,6 +82,29 @@ pip3 install rich jsonschema
 python3 mac_configurator.py
 ```
 
+### Optional: Create a Command-Line Shortcut
+
+For quick access, create an alias to launch the configurator from anywhere:
+
+**For Zsh (macOS default):**
+```bash
+echo "alias cfg='python3 /Users/$(whoami)/projects/mac_start/mac_configurator.py'" >> ~/.zshrc
+source ~/.zshrc
+```
+
+**For Bash:**
+```bash
+echo "alias cfg='python3 /Users/$(whoami)/projects/mac_start/mac_configurator.py'" >> ~/.bash_profile
+source ~/.bash_profile
+```
+
+**Customize the path** if you cloned the project to a different location. Replace `/Users/$(whoami)/projects/mac_start/` with your actual path.
+
+Once set up, you can launch the configurator from anywhere by simply typing:
+```bash
+cfg
+```
+
 ## Usage
 
 ### Interactive Mode
