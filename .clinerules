@@ -24,6 +24,16 @@ Before completing any task, explicitly verify:
 1. Does this change affect user-facing functionality?
 2. Does README.md document this change?
 3. If not, update README.md with clear examples
+4. Does README contain user-specific data (specific counts, system-specific values)?
+5. If yes, replace with generic examples (XXX, YYY) or remove entirely
+
+**Remove User-Specific Information:**
+- ❌ Specific extension counts (e.g., "451 extensions", "36 enabled")
+- ❌ User-specific file paths that include usernames
+- ❌ Personal configuration values unless they're clearly generic examples
+- ✅ Generic placeholders (XXX extensions, YY enabled)
+- ✅ Example items from the user's system (app names, extension names) are OK for realism
+- ✅ Generic example values (50%, 75%) for configurations
 
 ### 2. Schema-First Development
 When adding new settings:
@@ -170,6 +180,7 @@ mac_start/
 - [ ] Code works and is tested
 - [ ] Schema validation tested (if applicable)
 - [ ] README.md is updated (if user-facing change)
+- [ ] README.md has no user-specific data (counts, usernames, personal values)
 - [ ] No variable naming inconsistencies
 - [ ] Error handling is graceful
 - [ ] Live system values are properly displayed

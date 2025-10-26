@@ -47,7 +47,7 @@ Interactive Python utility to manage and apply Mac system settings with a beauti
 
 ### System Extensions
 - **System Extension Preferences** (object) - Configure preferences for system extensions
-- Browse all 451+ extensions (Widgets, Safari Extensions, Share Extensions, Quick Look, etc.)
+- Browse all system extensions (Widgets, Safari Extensions, Share Extensions, Quick Look, etc.)
 - Filter by: All, Enabled, Disabled
 - Enable/disable most extensions immediately
 - Friendly names matching System Settings
@@ -128,7 +128,7 @@ Select an item to toggle its blocked status
 
 ### System Extensions Management
 ```
-Total: 451 extensions (36 enabled, 415 disabled)
+Total: XXX extensions (YY enabled, ZZZ disabled)
 Filter: All | Showing: 50 extension(s)
 
           Extensions Management
