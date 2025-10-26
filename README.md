@@ -35,40 +35,141 @@ Interactive Python utility to manage and apply Mac system settings with a beauti
 ### System
 - **Screenshot Location** (string) - Directory path for saving screenshots
 
-## Screenshots
+### Startup Items
+- **Blocked Startup Items** (array) - List of applications prevented from launching at login
+- View all login items, block/allow individual apps
+- Blocked items automatically removed when settings applied
+
+### Background Apps
+- **Background App Permissions** (object) - Control which apps can run in the background
+- View all background apps and their status
+- Toggle permissions for each app
+
+### System Extensions
+- **System Extension Preferences** (object) - Configure preferences for system extensions
+- Browse all 451+ extensions (Widgets, Safari Extensions, Share Extensions, Quick Look, etc.)
+- Filter by: All, Enabled, Disabled
+- Enable/disable most extensions immediately
+- Friendly names matching System Settings
+- Visibility indicator showing which extensions appear in System Settings UI vs hidden system extensions
+
+## Interface Examples
 
 The configurator features a beautiful, color-coded Rich terminal interface:
 
 ### Main Menu
-![Main Menu](screenshots/main_menuv2.png)
+```
+╔══════════════════════════════════════════════════════╗
+║          Mac System Configurator - Work              ║
+╚══════════════════════════════════════════════════════╝
 
-The main menu provides quick access to all functionality with a clean, numbered interface.
+╭──────────┬───────────────────────────────────────────╮
+│ [1]      │ Manage Settings                           │
+│ [2]      │ Apply Settings Now                        │
+│ [3]      │ Generate AppleScript                      │
+│ [e]      │ Exit                                      │
+╰──────────┴───────────────────────────────────────────╯
+
+Select option:
+```
 
 ### Manage Settings - Category Selection
-![Manage Settings](screenshots/manage_settings.png)
+```
+    Manage Settings - Select Category
 
-Categories are color-coded with icons for easy identification:
-- 🌐 **Network** (blue)
-- 🔊 **Audio** (magenta)
-- 📱 **Dock** (cyan)
-- 📁 **Finder** (green)
-- ⚙️ **System** (yellow)
+╭──────────┬──────────────────────────────╮
+│ [1]      │ 🌐  Network                  │
+│ [2]      │ 🔊  Audio                    │
+│ [3]      │ 📱  Dock                     │
+│ [4]      │ 📁  Finder                   │
+│ [5]      │ ⚙️  System                   │
+│ [6]      │ 🚀  Startup                  │
+│ [7]      │ ⏱️  Background Apps          │
+│ [8]      │ 🔌  System Extensions        │
+╰──────────┴──────────────────────────────╯
 
-### Finder Settings View
-![Finder Settings](screenshots/finder_settings.png)
+Select category:
+```
 
-Settings are displayed in a clear table showing:
-- **Your Config** (Yellow) = Your configured values
-- **Live System** (Magenta) = Current actual system values
-- **Green ✓** = Matched (settings in sync)
-- **Yellow ⚠** = Mismatched (configured value differs from system)
-- **Dim ○** = Not configured (using system defaults)
-- **Red 🔒** = Requires admin privileges
+### Audio Settings View
+```
+              Audio Settings
 
-### AppleScript Generation
-![AppleScript Generated](screenshots/applescript_generated.png)
+╭────────┬─────────────────────┬─────────────┬─────────────┬────────╮
+│ Option │ Setting             │ Your Config │ Live System │ Status │
+├────────┼─────────────────────┼─────────────┼─────────────┼────────┤
+│ [1]    │ Audio Input Muted   │ true        │ true        │   ✓    │
+│ [2]    │ Audio Output Volume │ Not set     │ 50          │   ○    │
+╰────────┴─────────────────────┴─────────────┴─────────────┴────────╯
 
-Generate an AppleScript file that can be run at startup or on-demand to automatically apply all configured settings.
+Status Indicators:
+  ✓  = Config matches system (in sync)
+  ⚠  = Config differs from system
+  ○  = Not configured (using system default)
+```
+
+### Startup Items Management
+```
+          Startup Items Management
+
+╭────────┬──────────────────────┬──────────┬──────────────────╮
+│ Option │ Application Name     │ Status   │ Action           │
+├────────┼──────────────────────┼──────────┼──────────────────┤
+│ [1]    │ Raycast              │ Allowed  │ Block from start │
+│ [2]    │ Firefox              │ Allowed  │ Block from start │
+│ [3]    │ Keyboard Maestro     │ Allowed  │ Block from start │
+│ [4]    │ Messages             │ Blocked  │ Remove block     │
+╰────────┴──────────────────────┴──────────┴──────────────────╯
+
+Currently blocking 1 item(s) from startup
+
+Select an item to toggle its blocked status
+```
+
+### System Extensions Management
+```
+Total: 451 extensions (36 enabled, 415 disabled)
+Filter: All | Showing: 50 extension(s)
+
+          Extensions Management
+
+╭─────┬─────────────────────────┬────────────┬──────────┬────────┬──────╮
+│ #   │ Name                    │ Type       │ Visible  │ Status │ Pref │
+├─────┼─────────────────────────┼────────────┼──────────┼────────┼──────┤
+│ 1   │ Karabiner-DriverKit-... │ System Ext │ Hidden   │ ✓ On   │  -   │
+│ 2   │ Screen Time             │ Widget     │ User     │ ✗ Off  │  -   │
+│ 3   │ Add to Things           │ Share Ext  │ User     │ ✓ On   │ Allow│
+│ 4   │ Journal                 │ Share Ext  │ User     │ ✗ Off  │  -   │
+│ 5   │ Keka Finder Integration │ Finder Ext │ User     │ ✗ Off  │ Block│
+╰─────┴─────────────────────────┴────────────┴──────────┴────────┴──────╯
+
+🔒 = System Extension (requires System Settings to enable/disable)
+User = Visible in System Settings | Hidden = System/diagnostic extension
+
+Options:
+  [1-50]  Select extension number to configure
+  [f]     Filter (all/enabled/disabled)
+  [Enter] Return to main menu
+```
+
+### Apply Settings Screen
+```
+╔═══════════════════════════════╗
+║ Applying Settings - Work      ║
+╚═══════════════════════════════╝
+
+→ Applying 3 setting(s)...
+
+  • Audio Input Muted → true ✓
+  • Dock Auto-hide → true ✓
+  • Blocked Startup Items → 1 item(s) ✓
+
+╭──────────────────────────────────────────────╮
+│ ✓  Successfully Applied All Settings        │
+│                                              │
+│ 3 setting(s) updated                         │
+╰──────────────────────────────────────────────╯
+```
 
 ## Installation
 

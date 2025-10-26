@@ -74,6 +74,39 @@
           "handler": "SystemHandler",
           "requires_admin": false,
           "format": "path"
+        },
+        "startup_items_blocked": {
+          "type": "array",
+          "title": "Blocked Startup Items",
+          "description": "List of applications blocked from starting at login",
+          "category": "Startup",
+          "handler": "StartupItemsHandler",
+          "requires_admin": false,
+          "items": {
+            "type": "string"
+          }
+        },
+        "background_app_permissions": {
+          "type": "object",
+          "title": "Background App Permissions",
+          "description": "Control which apps can run in the background",
+          "category": "Background Apps",
+          "handler": "BackgroundAppsHandler",
+          "requires_admin": false,
+          "additionalProperties": {
+            "type": "boolean"
+          }
+        },
+        "system_extension_preferences": {
+          "type": "object",
+          "title": "System Extension Preferences",
+          "description": "Configure preferences for system extensions",
+          "category": "System Extensions",
+          "handler": "SystemExtensionsHandler",
+          "requires_admin": false,
+          "additionalProperties": {
+            "type": "boolean"
+          }
         }
       },
       "additionalProperties": false

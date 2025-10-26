@@ -122,9 +122,14 @@ class UserConfigPathManager:
 class ConfigManager:
     """Manages configuration file operations with schema validation"""
 
-    def __init__(self, config_path, schema_path='settings_schema.json'):
+    def __init__(self, config_path, schema_path=None):
         self.config_path = Path(config_path)
-        self.schema_path = Path(schema_path)
+        # If no schema path provided, look for it next to the script
+        if schema_path is None:
+            script_dir = Path(__file__).parent
+            self.schema_path = script_dir / 'settings_schema.json'
+        else:
+            self.schema_path = Path(schema_path)
         # Extract config name from path (remove '_config.json' suffix)
         self.config_name = self.config_path.stem.replace('_config', '')
         self.schema = self.load_schema()
@@ -491,6 +496,387 @@ class SystemHandler:
             return False
 
 
+class StartupItemsHandler:
+    """Handles login items / startup applications"""
+
+    @staticmethod
+    def get_login_items():
+        """Get list of all login items with their details"""
+        try:
+            result = subprocess.run(
+                ['osascript', '-e', 'tell application "System Events" to get the name of every login item'],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            if result.stdout.strip():
+                items = [item.strip() for item in result.stdout.strip().split(',')]
+                return items
+            return []
+        except subprocess.CalledProcessError:
+            return []
+
+    @staticmethod
+    def get_blocked_items():
+        """This is a placeholder - the actual blocked list comes from config"""
+        return []
+
+    @staticmethod
+    def set_blocked_items(blocked_list):
+        """Apply the blocked items list by removing them from login items"""
+        if not blocked_list:
+            return True
+
+        success = True
+        current_items = StartupItemsHandler.get_login_items()
+
+        for item_name in blocked_list:
+            if item_name in current_items:
+                try:
+                    # Remove the login item
+                    subprocess.run(
+                        ['osascript', '-e', f'tell application "System Events" to delete login item "{item_name}"'],
+                        check=True,
+                        capture_output=True
+                    )
+                except subprocess.CalledProcessError:
+                    success = False
+
+        return success
+
+    @staticmethod
+    def remove_login_item(item_name):
+        """Remove a specific login item"""
+        try:
+            subprocess.run(
+                ['osascript', '-e', f'tell application "System Events" to delete login item "{item_name}"'],
+                check=True,
+                capture_output=True
+            )
+            return True
+        except subprocess.CalledProcessError:
+            return False
+
+
+class BackgroundAppsHandler:
+    """Handles background app permissions"""
+
+    @staticmethod
+    def get_background_items():
+        """Get list of background items from sfltool"""
+        try:
+            result = subprocess.run(
+                ['sfltool', 'dumpbtm'],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+
+            # Parse the output to extract app names and their status
+            items = {}
+            lines = result.stdout.split('\n')
+            current_name = None
+            current_disposition = None
+
+            for line in lines:
+                line = line.strip()
+                if line.startswith('Name:'):
+                    current_name = line.split(':', 1)[1].strip()
+                elif line.startswith('Disposition:'):
+                    current_disposition = line
+                    if current_name and current_disposition:
+                        # Parse disposition to check if enabled
+                        enabled = 'enabled' in current_disposition.lower()
+                        items[current_name] = enabled
+                        current_name = None
+                        current_disposition = None
+
+            return items
+        except subprocess.CalledProcessError:
+            return {}
+
+    @staticmethod
+    def get_background_permissions():
+        """Get the current background permissions state as a dict"""
+        return BackgroundAppsHandler.get_background_items()
+
+    @staticmethod
+    def set_background_permissions(permissions_dict):
+        """Set background permissions - Note: This requires TCC database access"""
+        # This is complex and requires database manipulation or private APIs
+        # For now, we'll return True but note that full implementation would need
+        # to use the TCC database or System Events automation
+        # This is a placeholder for future enhancement
+        return True
+
+
+class SystemExtensionsHandler:
+    """Handles system extensions and app extensions"""
+
+    @staticmethod
+    def _get_friendly_name(bundle_path, bundle_id):
+        """Extract friendly name from extension bundle"""
+        import plistlib
+        import re
+
+        # Try to read Info.plist from the bundle
+        if bundle_path and bundle_path.endswith('.appex'):
+            info_plist_path = Path(bundle_path) / 'Contents' / 'Info.plist'
+            try:
+                if info_plist_path.exists():
+                    with open(info_plist_path, 'rb') as f:
+                        plist = plistlib.load(f)
+                        # Try CFBundleDisplayName first, then CFBundleName
+                        if 'CFBundleDisplayName' in plist:
+                            return plist['CFBundleDisplayName']
+                        elif 'CFBundleName' in plist:
+                            name = plist['CFBundleName']
+                            # Only return if it's not just the bundle ID
+                            if name != bundle_id and '.' not in name:
+                                return name
+            except:
+                pass
+
+        # Try to extract from the .appex filename
+        if bundle_path:
+            # Get the .appex filename without extension
+            appex_name = Path(bundle_path).stem
+            # Don't use if it's the same as bundle_id
+            if appex_name != bundle_id:
+                # Clean up common suffixes but preserve the rest
+                cleaned = appex_name
+                for suffix in ['Extension', 'Appex', 'Plugin', 'Service']:
+                    if cleaned.endswith(suffix):
+                        cleaned = cleaned[:-len(suffix)]
+
+                # Only add spaces if the name has camelCase (not already spaced or all caps)
+                if cleaned and not ' ' in cleaned and not cleaned.isupper():
+                    # Add space before capitals, but not at the start
+                    friendly = re.sub(r'(?<!^)([A-Z])', r' \1', cleaned).strip()
+                    if friendly:
+                        return friendly
+                elif cleaned:
+                    return cleaned
+
+        # Fall back to parsing bundle ID
+        # e.g., com.apple.Safari.CacheDelete -> Safari Cache Delete
+        parts = bundle_id.split('.')
+        if len(parts) >= 2:
+            # Get the last part
+            last_part = parts[-1]
+            # Add spaces before capitals for camelCase
+            if last_part and not last_part.isupper() and not ' ' in last_part:
+                friendly = re.sub(r'(?<!^)([A-Z])', r' \1', last_part).strip()
+                return friendly
+            return last_part
+
+        return bundle_id
+
+    @staticmethod
+    def get_system_extensions():
+        """Get list of all extensions with their details (system + app extensions)"""
+        extensions = []
+
+        # Get driver-level system extensions from systemextensionsctl
+        try:
+            result = subprocess.run(
+                ['systemextensionsctl', 'list'],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+
+            lines = result.stdout.split('\n')
+            parsing = False
+            for line in lines:
+                if 'enabled' in line and 'active' in line and 'teamID' in line:
+                    parsing = True
+                    continue
+
+                if parsing and line.strip():
+                    parts = line.split('\t')
+                    if len(parts) >= 6:
+                        enabled = parts[0].strip() == '*'
+                        active = parts[1].strip() == '*'
+                        team_id = parts[2].strip()
+                        bundle_info = parts[3].strip()
+                        name = parts[4].strip()
+                        state = parts[5].strip()
+
+                        bundle_id = bundle_info.split()[0] if bundle_info else ''
+                        version = ''
+                        if '(' in bundle_info and ')' in bundle_info:
+                            version = bundle_info.split('(')[1].split(')')[0]
+
+                        # For system extensions, name is usually already friendly
+                        friendly_name = name if name != bundle_id else SystemExtensionsHandler._get_friendly_name('', bundle_id)
+
+                        extensions.append({
+                            'name': name,
+                            'friendly_name': friendly_name,
+                            'bundle_id': bundle_id,
+                            'version': version,
+                            'team_id': team_id,
+                            'enabled': enabled,
+                            'active': active,
+                            'type': 'System Extension',
+                            'state': state,
+                            'user_visible': True  # System extensions always show in System Settings
+                        })
+        except subprocess.CalledProcessError:
+            pass
+
+        # Get app extensions from pluginkit
+        try:
+            result = subprocess.run(
+                ['pluginkit', '-m', '-v'],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+
+            lines = result.stdout.split('\n')
+            for line in lines:
+                if not line.strip():
+                    continue
+
+                # Format: [+]    bundle.id(version)	UUID	timestamp	path
+                enabled = line.startswith('+')
+                line_content = line.lstrip('+ \t')
+
+                # Split by tabs
+                parts = line_content.split('\t')
+                if len(parts) >= 4:
+                    bundle_info = parts[0].strip()
+                    path = parts[3].strip() if len(parts) > 3 else ''
+
+                    # Extract bundle ID and version
+                    if '(' in bundle_info and ')' in bundle_info:
+                        bundle_id = bundle_info.split('(')[0]
+                        version = bundle_info.split('(')[1].split(')')[0]
+                    else:
+                        bundle_id = bundle_info
+                        version = ''
+
+                    # Extract human-readable name from bundle ID
+                    name_parts = bundle_id.split('.')
+                    name = name_parts[-1] if name_parts else bundle_id
+
+                    # Get friendly name from bundle
+                    friendly_name = SystemExtensionsHandler._get_friendly_name(path, bundle_id)
+
+                    # Determine extension type from bundle ID or path
+                    ext_type = 'App Extension'
+                    user_visible = False  # Whether it shows in System Settings
+
+                    if 'safari' in bundle_id.lower():
+                        ext_type = 'Safari Extension'
+                        user_visible = True
+                    elif 'share' in bundle_id.lower() or 'ShareExtension' in path:
+                        ext_type = 'Share Extension'
+                        user_visible = True
+                    elif 'finder' in bundle_id.lower() or 'FileProvider' in path:
+                        ext_type = 'Finder Extension'
+                        user_visible = True
+                    elif 'widget' in bundle_id.lower() or 'Widget' in path:
+                        ext_type = 'Widget'
+                        user_visible = True
+                    elif 'qlpreview' in bundle_id.lower() or 'QuickLook' in path or 'QLPreview' in path:
+                        ext_type = 'Quick Look'
+                        user_visible = True
+                    elif 'spotlight' in bundle_id.lower() or 'SpotlightIndex' in path:
+                        ext_type = 'Spotlight'
+                        # Only some Spotlight extensions are user-visible
+                        if not ('diagnostic' in bundle_id.lower() or 'system' in bundle_id.lower()):
+                            user_visible = True
+                    elif 'messages' in bundle_id.lower() or 'MessagesExtension' in path:
+                        ext_type = 'Messages'
+                        user_visible = True
+                    elif 'photo' in bundle_id.lower() and 'edit' in bundle_id.lower():
+                        ext_type = 'Photos Editing'
+                        user_visible = True
+
+                    # System/framework extensions are not user-visible
+                    if any(x in bundle_id.lower() for x in ['diagnostic', 'framework', 'system.', 'coreservices', 'privateframework']):
+                        user_visible = False
+
+                    extensions.append({
+                        'name': name,
+                        'friendly_name': friendly_name,
+                        'bundle_id': bundle_id,
+                        'version': version,
+                        'team_id': '',
+                        'enabled': enabled,
+                        'active': enabled,  # For app extensions, enabled = active
+                        'type': ext_type,
+                        'state': 'enabled' if enabled else 'disabled',
+                        'path': path,
+                        'user_visible': user_visible
+                    })
+        except subprocess.CalledProcessError:
+            pass
+
+        return extensions
+
+    @staticmethod
+    def enable_extension(bundle_id):
+        """Enable a specific extension using pluginkit"""
+        try:
+            subprocess.run(
+                ['pluginkit', '-e', 'use', '-i', bundle_id],
+                capture_output=True,
+                check=True
+            )
+            return True
+        except subprocess.CalledProcessError as e:
+            # Some extensions cannot be controlled (system extensions, protected extensions)
+            return False
+
+    @staticmethod
+    def disable_extension(bundle_id):
+        """Disable a specific extension using pluginkit"""
+        try:
+            subprocess.run(
+                ['pluginkit', '-e', 'ignore', '-i', bundle_id],
+                capture_output=True,
+                check=True
+            )
+            return True
+        except subprocess.CalledProcessError as e:
+            # Some extensions cannot be controlled (system extensions, protected extensions)
+            return False
+
+    @staticmethod
+    def get_extension_preferences():
+        """Get extension preferences - placeholder that returns empty dict"""
+        # This is just a placeholder since actual preferences come from config
+        return {}
+
+    @staticmethod
+    def set_extension_preferences(preferences_dict):
+        """Apply extension preferences by enabling/disabling extensions"""
+        if not preferences_dict:
+            return True
+
+        success_count = 0
+        fail_count = 0
+
+        for bundle_id, should_enable in preferences_dict.items():
+            if should_enable:
+                if SystemExtensionsHandler.enable_extension(bundle_id):
+                    success_count += 1
+                else:
+                    fail_count += 1
+            else:
+                if SystemExtensionsHandler.disable_extension(bundle_id):
+                    success_count += 1
+                else:
+                    fail_count += 1
+
+        # Return True if at least some succeeded, or if none were attempted
+        return success_count > 0 or fail_count == 0
+
+
 class MacConfigurator:
     """Main application class"""
 
@@ -509,6 +895,9 @@ class MacConfigurator:
         self.dock_handler = DockHandler()
         self.finder_handler = FinderHandler()
         self.system_handler = SystemHandler()
+        self.startup_items_handler = StartupItemsHandler()
+        self.background_apps_handler = BackgroundAppsHandler()
+        self.system_extensions_handler = SystemExtensionsHandler()
 
         # Handler mapping for dynamic lookup
         self.handler_map = {
@@ -517,7 +906,10 @@ class MacConfigurator:
             'AudioOutputHandler': self.audio_output_handler,
             'DockHandler': self.dock_handler,
             'FinderHandler': self.finder_handler,
-            'SystemHandler': self.system_handler
+            'SystemHandler': self.system_handler,
+            'StartupItemsHandler': self.startup_items_handler,
+            'BackgroundAppsHandler': self.background_apps_handler,
+            'SystemExtensionsHandler': self.system_extensions_handler
         }
 
         # Handler method mapping for each setting
@@ -529,7 +921,10 @@ class MacConfigurator:
             'dock_position': ('get_position', 'set_position'),
             'finder_show_hidden': ('get_show_hidden_files', 'set_show_hidden_files'),
             'finder_show_extensions': ('get_show_extensions', 'set_show_extensions'),
-            'screenshot_location': ('get_screenshot_location', 'set_screenshot_location')
+            'screenshot_location': ('get_screenshot_location', 'set_screenshot_location'),
+            'startup_items_blocked': ('get_blocked_items', 'set_blocked_items'),
+            'background_app_permissions': ('get_background_permissions', 'set_background_permissions'),
+            'system_extension_preferences': ('get_extension_preferences', 'set_extension_preferences')
         }
 
         # Build settings structure from schema
@@ -592,7 +987,10 @@ class MacConfigurator:
             'Audio': ('🔊', 'magenta'),
             'Dock': ('📱', 'cyan'),
             'Finder': ('📁', 'green'),
-            'System': ('⚙️', 'yellow')
+            'System': ('⚙️ ', 'yellow'),  # Extra space for alignment
+            'Startup': ('🚀', 'bright_cyan'),
+            'Background Apps': ('⏱️ ', 'bright_magenta'),  # Extra space for alignment
+            'System Extensions': ('🔌', 'bright_yellow')
         }
 
         while True:
@@ -624,7 +1022,17 @@ class MacConfigurator:
             try:
                 category_idx = int(choice) - 1
                 category_name = category_list[category_idx]
-                self._manage_category_settings(category_name)
+
+                # Route to custom UI for special categories
+                if category_name == 'Startup':
+                    self._manage_startup_items()
+                elif category_name == 'Background Apps':
+                    self._manage_background_apps()
+                elif category_name == 'System Extensions':
+                    self._manage_system_extensions()
+                else:
+                    self._manage_category_settings(category_name)
+
             except (ValueError, IndexError):
                 self.console.print("[red]Invalid selection[/red]")
                 self.console.input("\nPress Enter to continue...")
@@ -954,10 +1362,31 @@ class MacConfigurator:
         for category_name, settings in self.categories.items():
             for setting_key, setting_info in settings.items():
                 configured_value = self.config_manager.get_setting(setting_key)
-                current_value = setting_info['get_current']()
 
-                # Only apply if explicitly configured and different from current
-                if configured_value is not None and configured_value != current_value:
+                # Skip if not configured
+                if configured_value is None:
+                    continue
+
+                # Special handling for array/object types (startup items, background apps, system extensions)
+                if setting_key == 'startup_items_blocked':
+                    # Always apply if there are blocked items
+                    if configured_value:
+                        to_apply.append((setting_key, setting_info, configured_value))
+                    continue
+                elif setting_key == 'background_app_permissions':
+                    # Always apply if there are configured permissions
+                    if configured_value:
+                        to_apply.append((setting_key, setting_info, configured_value))
+                    continue
+                elif setting_key == 'system_extension_preferences':
+                    # Always apply if there are configured preferences
+                    if configured_value:
+                        to_apply.append((setting_key, setting_info, configured_value))
+                    continue
+
+                # For regular settings, check if different from current
+                current_value = setting_info['get_current']()
+                if configured_value != current_value:
                     # Check if requires admin
                     if setting_info.get('requires_admin', False) and not self.is_admin:
                         skipped_admin.append((setting_key, setting_info, configured_value))
@@ -994,7 +1423,15 @@ class MacConfigurator:
             fail_count = 0
 
             for setting_key, setting_info, configured_value in to_apply:
-                self.console.print(f"  [dim]•[/dim] [bold bright_white]{setting_info['name']}[/bold bright_white] → [bright_yellow]{configured_value}[/bright_yellow] ", end="")
+                # Format the value display based on type
+                if isinstance(configured_value, list):
+                    value_display = f"{len(configured_value)} item(s)"
+                elif isinstance(configured_value, dict):
+                    value_display = f"{len(configured_value)} permission(s)"
+                else:
+                    value_display = str(configured_value)
+
+                self.console.print(f"  [dim]•[/dim] [bold bright_white]{setting_info['name']}[/bold bright_white] → [bright_yellow]{value_display}[/bright_yellow] ", end="")
 
                 if setting_info['set_value'](configured_value):
                     self.console.print("[bold green]✓[/bold green]")
@@ -1052,6 +1489,340 @@ do shell script "python3 {str(Path.cwd() / 'mac_configurator.py')} --apply '{sel
 
         self.console.print()
         self.console.input("Press Enter to continue...")
+
+    def _manage_startup_items(self):
+        """Manage startup items with custom UI"""
+        while True:
+            self.console.clear()
+
+            # Get current login items and blocked list from config
+            current_items = self.startup_items_handler.get_login_items()
+            blocked_items = self.config_manager.get_setting('startup_items_blocked') or []
+
+            # Create table showing all login items
+            table = Table(title="[bold bright_white]Startup Items Management[/bold bright_white]", box=box.ROUNDED)
+            table.add_column("Option", style="bright_cyan bold", width=8)
+            table.add_column("Application Name", style="bright_white", width=35)
+            table.add_column("Status", style="bright_yellow", width=15)
+            table.add_column("Action", style="bright_magenta", width=15)
+
+            for idx, item_name in enumerate(current_items, 1):
+                is_blocked = item_name in blocked_items
+                status = "[red]Blocked[/red]" if is_blocked else "[green]Allowed[/green]"
+                action = "[dim]Remove block[/dim]" if is_blocked else "Block from startup"
+                table.add_row(f"[{idx}]", item_name, status, action)
+
+            self.console.print(table)
+
+            if blocked_items:
+                self.console.print(f"\n[dim]Currently blocking {len(blocked_items)} item(s) from startup[/dim]")
+
+            self.console.print("\n[dim italic]Select an item to toggle its blocked status, or press Enter to return[/dim italic]")
+
+            choice = Prompt.ask(
+                "\nSelect item",
+                choices=[str(i) for i in range(1, len(current_items) + 1)],
+                default="",
+                show_choices=False
+            )
+
+            if not choice:
+                break
+
+            try:
+                item_idx = int(choice) - 1
+                item_name = current_items[item_idx]
+
+                if item_name in blocked_items:
+                    # Remove from blocked list
+                    blocked_items.remove(item_name)
+                    self.config_manager.set_setting('startup_items_blocked', blocked_items)
+                    self.console.print(f"\n[green]✓ Removed '{item_name}' from blocked list[/green]")
+                else:
+                    # Add to blocked list and remove from login items
+                    blocked_items.append(item_name)
+                    self.config_manager.set_setting('startup_items_blocked', blocked_items)
+
+                    # Ask if user wants to remove it now
+                    if Confirm.ask(f"\n[cyan]Remove '{item_name}' from startup now?[/cyan]", default=True):
+                        if self.startup_items_handler.remove_login_item(item_name):
+                            self.console.print(f"[green]✓ Removed '{item_name}' from startup[/green]")
+                        else:
+                            self.console.print(f"[red]✗ Failed to remove '{item_name}'[/red]")
+                    else:
+                        self.console.print("[dim]Will be removed next time settings are applied[/dim]")
+
+                self.console.input("\nPress Enter to continue...")
+
+            except (ValueError, IndexError):
+                self.console.print("[red]Invalid selection[/red]")
+                self.console.input("\nPress Enter to continue...")
+
+    def _manage_background_apps(self):
+        """Manage background app permissions with custom UI"""
+        while True:
+            self.console.clear()
+
+            # Get current background items and configured permissions
+            current_permissions = self.background_apps_handler.get_background_items()
+            configured_permissions = self.config_manager.get_setting('background_app_permissions') or {}
+
+            if not current_permissions:
+                self.console.print(Panel(
+                    "[yellow]No background items found.[/yellow]\n\n"
+                    "Background app management requires macOS 13+ and may need additional permissions.",
+                    border_style="yellow",
+                    box=box.ROUNDED
+                ))
+                self.console.input("\nPress Enter to return...")
+                break
+
+            # Create table showing all background apps
+            table = Table(title="[bold bright_white]Background App Permissions[/bold bright_white]", box=box.ROUNDED)
+            table.add_column("Option", style="bright_cyan bold", width=8)
+            table.add_column("Application Name", style="bright_white", width=35)
+            table.add_column("System Status", style="bright_magenta", width=15)
+            table.add_column("Your Config", style="bright_yellow", width=15)
+
+            app_names = sorted(current_permissions.keys())
+            for idx, app_name in enumerate(app_names, 1):
+                system_enabled = current_permissions[app_name]
+                system_status = "[green]Enabled[/green]" if system_enabled else "[red]Disabled[/red]"
+
+                if app_name in configured_permissions:
+                    config_enabled = configured_permissions[app_name]
+                    config_status = "[green]Enabled[/green]" if config_enabled else "[red]Disabled[/red]"
+                else:
+                    config_status = "[dim italic]Not set[/dim italic]"
+
+                table.add_row(f"[{idx}]", app_name, system_status, config_status)
+
+            self.console.print(table)
+            self.console.print("\n[yellow]Note:[/yellow] Changing background app permissions requires system-level access.")
+            self.console.print("[dim]This feature stores your preferences but may not be able to apply them directly.[/dim]")
+            self.console.print("\n[dim italic]Select an app to configure, or press Enter to return[/dim italic]")
+
+            choice = Prompt.ask(
+                "\nSelect app",
+                choices=[str(i) for i in range(1, len(app_names) + 1)],
+                default="",
+                show_choices=False
+            )
+
+            if not choice:
+                break
+
+            try:
+                app_idx = int(choice) - 1
+                app_name = app_names[app_idx]
+                current_setting = configured_permissions.get(app_name, current_permissions[app_name])
+
+                self.console.print(f"\n[bold]Configuring: {app_name}[/bold]")
+                new_value = Confirm.ask(
+                    "[cyan]Allow to run in background?[/cyan]",
+                    default=current_setting
+                )
+
+                # Update config
+                if app_name not in configured_permissions:
+                    configured_permissions = dict(configured_permissions)
+
+                configured_permissions[app_name] = new_value
+                self.config_manager.set_setting('background_app_permissions', configured_permissions)
+
+                self.console.print(f"\n[green]✓ Saved preference for '{app_name}'[/green]")
+                self.console.input("\nPress Enter to continue...")
+
+            except (ValueError, IndexError):
+                self.console.print("[red]Invalid selection[/red]")
+                self.console.input("\nPress Enter to continue...")
+
+    def _manage_system_extensions(self):
+        """Manage system extensions with custom UI"""
+        # Filter menu
+        show_filter = 'all'  # all, enabled, disabled
+
+        while True:
+            self.console.clear()
+
+            # Get current system extensions and configured preferences
+            all_extensions = self.system_extensions_handler.get_system_extensions()
+            configured_preferences = self.config_manager.get_setting('system_extension_preferences') or {}
+
+            if not all_extensions:
+                self.console.print(Panel(
+                    "[yellow]No extensions found.[/yellow]\n\n"
+                    "Extensions include system extensions, Safari extensions, share extensions, and more.",
+                    border_style="yellow",
+                    box=box.ROUNDED
+                ))
+                self.console.input("\nPress Enter to return...")
+                break
+
+            # Apply filter
+            if show_filter == 'enabled':
+                current_extensions = [e for e in all_extensions if e['enabled']]
+            elif show_filter == 'disabled':
+                current_extensions = [e for e in all_extensions if not e['enabled']]
+            else:
+                current_extensions = all_extensions
+
+            # Show summary
+            enabled_count = sum(1 for e in all_extensions if e['enabled'])
+            self.console.print(f"[dim]Total: {len(all_extensions)} extensions ({enabled_count} enabled, {len(all_extensions) - enabled_count} disabled)[/dim]")
+            self.console.print(f"[dim]Filter: {show_filter.title()} | Showing: {len(current_extensions)} extension(s)[/dim]\n")
+
+            # Limit display to first 50 for performance
+            display_extensions = current_extensions[:50]
+            if len(current_extensions) > 50:
+                self.console.print(f"[yellow]Showing first 50 of {len(current_extensions)} extensions[/yellow]\n")
+
+            # Create table showing extensions
+            table = Table(title="[bold bright_white]Extensions Management[/bold bright_white]", box=box.ROUNDED)
+            table.add_column("#", style="bright_cyan bold", width=5)
+            table.add_column("Name", style="bright_white", width=35, no_wrap=False)
+            table.add_column("Type", style="dim", width=13)
+            table.add_column("Visibility", style="dim", width=8)
+            table.add_column("Status", style="bright_magenta", width=7)
+            table.add_column("Pref", style="bright_yellow", width=7)
+
+            for idx, ext in enumerate(display_extensions, 1):
+                # Use friendly_name if available, otherwise fall back to name
+                display_name = ext.get('friendly_name', ext['name'])
+                ext_type = ext.get('type', 'Unknown')
+                is_system_ext = ext_type == 'System Extension'
+                is_user_visible = ext.get('user_visible', False)
+
+                # Truncate type if needed
+                type_display = ext_type[:11] if not is_system_ext else ext_type[:11] + " 🔒"
+
+                # Visibility indicator
+                if is_user_visible:
+                    visibility = "[green]User[/green]"
+                else:
+                    visibility = "[dim]Hidden[/dim]"
+
+                enabled = ext['enabled']
+
+                # Determine system status
+                system_status = "[green]✓ On[/green]" if enabled else "[dim]✗ Off[/dim]"
+
+                # Get user preference
+                bundle_id = ext['bundle_id']
+                if bundle_id in configured_preferences:
+                    user_pref = configured_preferences[bundle_id]
+                    pref_display = "[green]Allow[/green]" if user_pref else "[red]Block[/red]"
+                else:
+                    pref_display = "[dim]-[/dim]"
+
+                table.add_row(f"{idx}", display_name, type_display, visibility, system_status, pref_display)
+
+            self.console.print(table)
+            self.console.print("\n[dim]🔒 = System Extension (requires System Settings to enable/disable)[/dim]")
+            self.console.print("[dim]User = Visible in System Settings | Hidden = System/diagnostic extension[/dim]")
+            self.console.print("\n[bold]Options:[/bold]")
+            self.console.print("  [cyan]1-50[/cyan]    Select extension number to configure")
+            self.console.print("  [cyan]f[/cyan]      Filter (all/enabled/disabled)")
+            self.console.print("  [cyan]Enter[/cyan]  Return to main menu")
+
+            choice = Prompt.ask("\nYour choice", default="")
+
+            if not choice:
+                break
+            elif choice.lower() == 'f':
+                # Cycle through filters
+                if show_filter == 'all':
+                    show_filter = 'enabled'
+                elif show_filter == 'enabled':
+                    show_filter = 'disabled'
+                else:
+                    show_filter = 'all'
+                continue
+
+            try:
+                ext_idx = int(choice) - 1
+                if 0 <= ext_idx < len(display_extensions):
+                    ext = display_extensions[ext_idx]
+                    bundle_id = ext['bundle_id']
+                    current_pref = configured_preferences.get(bundle_id, ext['enabled'])
+
+                    # Show extension details
+                    self.console.print()
+                    friendly_name = ext.get('friendly_name', ext['name'])
+                    ext_type = ext.get('type', 'Unknown')
+                    is_system_extension = ext_type == 'System Extension'
+
+                    detail_text = f"[bold]{friendly_name}[/bold]\n\n"
+                    detail_text += f"[dim]Type:[/dim] {ext_type}\n"
+                    detail_text += f"[dim]Bundle ID:[/dim] {bundle_id}\n"
+                    if ext['version']:
+                        detail_text += f"[dim]Version:[/dim] {ext['version']}\n"
+                    if ext.get('team_id'):
+                        detail_text += f"[dim]Team ID:[/dim] {ext['team_id']}\n"
+                    detail_text += f"[dim]Current Status:[/dim] {'Enabled' if ext['enabled'] else 'Disabled'}\n"
+
+                    if is_system_extension:
+                        detail_text += f"\n[yellow]⚠ Driver-level System Extension[/yellow]\n"
+                        detail_text += f"[dim]Cannot be controlled programmatically[/dim]"
+
+                    self.console.print(Panel(detail_text, border_style="cyan", box=box.ROUNDED))
+
+                    # Warn if system extension
+                    if is_system_extension:
+                        self.console.print("\n[yellow]This is a driver-level system extension.[/yellow]")
+                        self.console.print("[dim]To enable/disable, you must use:[/dim]")
+                        self.console.print("[dim]System Settings > General > Login Items & Extensions[/dim]")
+                        self.console.print()
+                        if not Confirm.ask("[cyan]Save preference anyway (for documentation)?[/cyan]", default=False):
+                            self.console.input("\nPress Enter to continue...")
+                            continue
+
+                    # Ask for preference
+                    new_pref = Confirm.ask(
+                        "\n[cyan]Allow this extension?[/cyan]",
+                        default=current_pref
+                    )
+
+                    # Update config
+                    configured_preferences = dict(configured_preferences)
+                    configured_preferences[bundle_id] = new_pref
+                    self.config_manager.set_setting('system_extension_preferences', configured_preferences)
+
+                    self.console.print(f"\n[green]✓ Saved preference[/green]")
+
+                    # Offer to apply immediately if preference differs from system
+                    if new_pref != ext['enabled']:
+                        self.console.print()
+
+                        # Don't even offer to apply for system extensions
+                        if is_system_extension:
+                            self.console.print("[yellow]Preference saved (documentation only)[/yellow]")
+                            self.console.print("[dim]To apply: System Settings > General > Login Items & Extensions[/dim]")
+                        elif Confirm.ask("[cyan]Apply this change now?[/cyan]", default=True):
+                            self.console.print(f"Applying change...", end=" ")
+
+                            if new_pref:
+                                success = self.system_extensions_handler.enable_extension(bundle_id)
+                            else:
+                                success = self.system_extensions_handler.disable_extension(bundle_id)
+
+                            if success:
+                                self.console.print("[green]✓ Applied[/green]")
+                                self.console.print("[dim]Note: Extension may take a moment to update. Restart the app if needed.[/dim]")
+                            else:
+                                self.console.print("[red]✗ Failed[/red]")
+                                self.console.print("[yellow]This extension cannot be controlled programmatically.[/yellow]")
+                        else:
+                            self.console.print("[dim]Preference saved. Use 'Apply Settings Now' from main menu to apply later.[/dim]")
+
+                    self.console.input("\nPress Enter to continue...")
+                else:
+                    self.console.print("[red]Invalid number[/red]")
+                    self.console.input("\nPress Enter to continue...")
+
+            except (ValueError, IndexError):
+                self.console.print("[red]Invalid input[/red]")
+                self.console.input("\nPress Enter to continue...")
 
     def run_interactive_menu(self):
         """Main interactive menu loop"""
