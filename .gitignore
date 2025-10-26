@@ -27,5 +27,39 @@ ENV/
 # macOS
 .DS_Store
 
+# Xcode
+*.xcodeproj/*
+!*.xcodeproj/project.pbxproj
+!*.xcodeproj/xcshareddata/
+!*.xcworkspace/contents.xcworkspacedata
+*.xcworkspace/*
+!*.xcworkspace/xcshareddata/
+xcuserdata/
+*.xcuserstate
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+*.pbxuser
+!default.pbxuser
+!default.mode1v3
+!default.mode2v3
+!default.perspectivev3
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+DerivedData/
+.build/
+Build/
+Carthage/Build/
+*.moved-aside
+*.swiftpm
+.swiftpm/
+
+# Swift Package Manager
+.swiftpm/config/registries.json
+.swiftpm/xcode/package.xcworkspace/contents.xcworkspacedata
+.netrc
+
 
 

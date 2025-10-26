@@ -1,552 +1,274 @@
 # Mac System Configurator
 
-Interactive Python utility to manage and apply Mac system settings with a beautiful Rich-powered terminal UI and JSON Schema validation.
+Manage and apply Mac system settings with ease - available in both CLI and native macOS GUI versions.
 
-## Features
+## Overview
 
-- **Multiple Configurations**: Create and manage different configuration profiles (Work, Home, Presentation, etc.)
-- **Schema-Based Settings**: All settings defined with JSON Schema validation
-- **Explicit Configuration**: Only apply settings you've explicitly configured
-- **Live System Values**: Always see your configured value vs. actual system state
-- **Delete/Unset Settings**: Remove settings to return to system defaults
-- **Manage Settings**: Browse settings by category with visual status indicators
-- **Apply Settings**: Apply configured settings to your Mac (with admin permission handling)
-- **Generate AppleScript**: Create a script for startup or ad-hoc execution
-- **Rich Terminal UI**: Beautiful tables, panels, and color-coded status displays
-- **Admin Awareness**: Non-admin users can view/edit all settings; admin-required settings are clearly marked and skipped during apply
+This project provides tools to manage macOS system settings through configuration profiles. Create different profiles for different scenarios (Work, Home, Presentation, etc.) and switch between them effortlessly.
 
-## Available Settings
+Both versions share the same configuration format and settings schema, so you can use whichever interface you prefer.
 
-### Network
-- **WiFi Enabled** (boolean) - 🔒 Requires admin privileges
+---
 
-### Audio
-- **Input Muted** (boolean) - Mute/unmute system microphone
-- **Output Volume** (0-100) - Set system speaker volume
+## 📱 Native macOS App (SwiftUI)
 
-### Dock
-- **Auto-hide Dock** (boolean) - Automatically hide/show the Dock
-- **Dock Position** (choice: left/bottom/right) - Set Dock screen position
+**Status:** 🚧 In Development
 
-### Finder
-- **Show Hidden Files** (boolean) - Show/hide hidden files in Finder
-- **Show All Extensions** (boolean) - Show/hide file extensions
+A beautiful, native macOS application built with SwiftUI.
 
-### System
-- **Screenshot Location** (string) - Directory path for saving screenshots
+### Features (Planned)
+- Native macOS interface matching System Settings design
+- Sidebar navigation by category
+- Real-time sync indicators
+- Visual settings controls (toggles, sliders, pickers)
+- Profile management with quick switching
+- Live preview of settings changes
+- Menu bar integration (optional)
 
-### Startup Items
-- **Blocked Startup Items** (array) - List of applications prevented from launching at login
-- View all login items, block/allow individual apps
-- Blocked items automatically removed when settings applied
+### Getting Started
 
-### Background Apps
-- **Background App Permissions** (object) - Control which apps can run in the background
-- View all background apps and their status
-- Toggle permissions for each app
+The SwiftUI app is located in the `MacConfigurator/` directory.
 
-### System Extensions
-- **System Extension Preferences** (object) - Configure preferences for system extensions
-- Browse all system extensions (Widgets, Safari Extensions, Share Extensions, Quick Look, etc.)
-- Filter by: All, Enabled, Disabled
-- Enable/disable most extensions immediately
-- Friendly names matching System Settings
-- Visibility indicator showing which extensions appear in System Settings UI vs hidden system extensions
+To build and run:
+1. Open `MacConfigurator/MacConfigurator.xcodeproj` in Xcode
+2. Build and run (⌘R)
 
-## Interface Examples
+The GUI app shares configuration files with the CLI version in `~/MacConfigurator/`.
 
-The configurator features a beautiful, color-coded Rich terminal interface:
+📖 [More details →](MacConfigurator/README.md)
 
-### Main Menu
-```
-╔══════════════════════════════════════════════════════╗
-║          Mac System Configurator - Work              ║
-╚══════════════════════════════════════════════════════╝
+---
 
-╭──────────┬───────────────────────────────────────────╮
-│ [1]      │ Manage Settings                           │
-│ [2]      │ Apply Settings Now                        │
-│ [3]      │ Generate AppleScript                      │
-│ [e]      │ Exit                                      │
-╰──────────┴───────────────────────────────────────────╯
+## 💻 Command-Line Interface (Python)
 
-Select option:
-```
+A fully-featured terminal application with a beautiful Rich-powered UI.
 
-### Manage Settings - Category Selection
-```
-    Manage Settings - Select Category
+### Features
+- ✅ Multiple configuration profiles
+- ✅ JSON Schema-based settings validation
+- ✅ Live system value comparison
+- ✅ Rich terminal UI with tables and panels
+- ✅ Generate AppleScript for startup execution
+- ✅ Manage startup items, background apps, and system extensions
+- ✅ Admin permission handling
 
-╭──────────┬──────────────────────────────╮
-│ [1]      │ 🌐  Network                  │
-│ [2]      │ 🔊  Audio                    │
-│ [3]      │ 📱  Dock                     │
-│ [4]      │ 📁  Finder                   │
-│ [5]      │ ⚙️  System                   │
-│ [6]      │ 🚀  Startup                  │
-│ [7]      │ ⏱️  Background Apps          │
-│ [8]      │ 🔌  System Extensions        │
-╰──────────┴──────────────────────────────╯
+### Quick Start
 
-Select category:
-```
-
-### Audio Settings View
-```
-              Audio Settings
-
-╭────────┬─────────────────────┬─────────────┬─────────────┬────────╮
-│ Option │ Setting             │ Your Config │ Live System │ Status │
-├────────┼─────────────────────┼─────────────┼─────────────┼────────┤
-│ [1]    │ Audio Input Muted   │ true        │ true        │   ✓    │
-│ [2]    │ Audio Output Volume │ Not set     │ 50          │   ○    │
-╰────────┴─────────────────────┴─────────────┴─────────────┴────────╯
-
-Status Indicators:
-  ✓  = Config matches system (in sync)
-  ⚠  = Config differs from system
-  ○  = Not configured (using system default)
-```
-
-### Startup Items Management
-```
-          Startup Items Management
-
-╭────────┬──────────────────────┬──────────┬──────────────────╮
-│ Option │ Application Name     │ Status   │ Action           │
-├────────┼──────────────────────┼──────────┼──────────────────┤
-│ [1]    │ Raycast              │ Allowed  │ Block from start │
-│ [2]    │ Firefox              │ Allowed  │ Block from start │
-│ [3]    │ Keyboard Maestro     │ Allowed  │ Block from start │
-│ [4]    │ Messages             │ Blocked  │ Remove block     │
-╰────────┴──────────────────────┴──────────┴──────────────────╯
-
-Currently blocking 1 item(s) from startup
-
-Select an item to toggle its blocked status
-```
-
-### System Extensions Management
-```
-Total: XXX extensions (YY enabled, ZZZ disabled)
-Filter: All | Showing: 50 extension(s)
-
-          Extensions Management
-
-╭─────┬─────────────────────────┬────────────┬──────────┬────────┬──────╮
-│ #   │ Name                    │ Type       │ Visible  │ Status │ Pref │
-├─────┼─────────────────────────┼────────────┼──────────┼────────┼──────┤
-│ 1   │ Karabiner-DriverKit-... │ System Ext │ Hidden   │ ✓ On   │  -   │
-│ 2   │ Screen Time             │ Widget     │ User     │ ✗ Off  │  -   │
-│ 3   │ Add to Things           │ Share Ext  │ User     │ ✓ On   │ Allow│
-│ 4   │ Journal                 │ Share Ext  │ User     │ ✗ Off  │  -   │
-│ 5   │ Keka Finder Integration │ Finder Ext │ User     │ ✗ Off  │ Block│
-╰─────┴─────────────────────────┴────────────┴──────────┴────────┴──────╯
-
-🔒 = System Extension (requires System Settings to enable/disable)
-User = Visible in System Settings | Hidden = System/diagnostic extension
-
-Options:
-  [1-50]  Select extension number to configure
-  [f]     Filter (all/enabled/disabled)
-  [Enter] Return to main menu
-```
-
-### Apply Settings Screen
-```
-╔═══════════════════════════════╗
-║ Applying Settings - Work      ║
-╚═══════════════════════════════╝
-
-→ Applying 3 setting(s)...
-
-  • Audio Input Muted → true ✓
-  • Dock Auto-hide → true ✓
-  • Blocked Startup Items → 1 item(s) ✓
-
-╭──────────────────────────────────────────────╮
-│ ✓  Successfully Applied All Settings        │
-│                                              │
-│ 3 setting(s) updated                         │
-╰──────────────────────────────────────────────╯
-```
-
-## Installation
-
-1. Install dependencies:
 ```bash
+# Install dependencies
 pip3 install rich jsonschema
-```
 
-2. Run the configurator:
-```bash
-python3 mac_configurator.py
-```
+# Run the configurator
+python3 python_app/mac_configurator.py
 
-### Optional: Create a Command-Line Shortcut
-
-For quick access, create an alias to launch the configurator from anywhere:
-
-**For Zsh (macOS default):**
-```bash
-echo "alias cfg='python3 /Users/$(whoami)/projects/mac_start/mac_configurator.py'" >> ~/.zshrc
+# Or create an alias for quick access
+echo "alias cfg='python3 $(pwd)/python_app/mac_configurator.py'" >> ~/.zshrc
 source ~/.zshrc
-```
-
-**For Bash:**
-```bash
-echo "alias cfg='python3 /Users/$(whoami)/projects/mac_start/mac_configurator.py'" >> ~/.bash_profile
-source ~/.bash_profile
-```
-
-**Customize the path** if you cloned the project to a different location. Replace `/Users/$(whoami)/projects/mac_start/` with your actual path.
-
-Once set up, you can launch the configurator from anywhere by simply typing:
-```bash
 cfg
 ```
 
-## Usage
+📖 [Full CLI documentation →](python_app/README.md)
 
-### Interactive Mode
+---
 
-```bash
-python3 mac_configurator.py
-```
+## Available Settings
 
-On first run, you'll see the **Configuration Management** screen:
+Both versions support the same comprehensive set of macOS settings:
 
-**If no configurations exist:**
-- Create New Config
-- Exit
+### 🌐 Network
+- WiFi enabled/disabled (requires admin)
 
-**If configurations exist:**
-- Select a configuration to edit (by number)
-- Create New Config
-- Delete a Config
-- Exit
+### 🔊 Audio
+- Input muted
+- Output volume (0-100)
 
-Once you select or create a configuration, you'll enter the **Settings Management** screen with:
-1. **Manage Settings** - Browse by category, view/edit individual settings
-2. **Apply Settings Now** - Apply all configured settings to your system
-3. **Generate AppleScript** - Create a startup/ad-hoc script for this config
-4. **Exit** (returns to Configuration Management)
+### 📱 Dock
+- Auto-hide
+- Position (left/bottom/right)
 
-### Workflow
+### 📁 Finder
+- Show hidden files
+- Show all file extensions
 
-**Viewing Settings:**
-- When you select a setting, you'll see:
-  - **Your Config**: The value you've configured (or "Not configured")
-  - **Live System**: The actual current value on your Mac
-  - Helpful indicators showing if values match or differ
+### ⚙️ System
+- Screenshot save location
 
-**When Values Differ:**
-- If your configured value differs from the live system value:
-  - You'll be prompted: "Apply this setting now? (y/n) [n]:"
-  - Press Enter to skip, or type 'y' to apply immediately
-  - After applying, you'll see refreshed status
+### 🚀 Startup Items
+- Block/allow applications from launching at login
 
-**Editing Settings:**
-1. Select "Manage Settings"
-2. Choose a category (Network, Audio, Dock, etc.)
-3. Select a setting to view/edit
-4. If configured value differs from system, optionally apply it
-5. You can delete configured settings to "unset" them
-6. Enter new value if desired
-7. Optionally apply immediately or press Enter to skip
+### ⏱️ Background Apps
+- Control background app permissions
 
-**Applying Settings:**
-- From main menu, select "Apply Settings Now"
-- Only explicitly configured settings that differ from system state will be applied
-- Settings requiring admin privileges are automatically skipped for non-admin users
+### 🔌 System Extensions
+- Enable/disable system extensions
+- Manage widgets, Safari extensions, Quick Look plugins, etc.
 
-### Admin Permission Handling
-
-**Non-admin users:**
-- Can view and edit ALL settings
-- Settings are saved to config regardless of admin status
-- Admin-required settings show 🔒 icon
-- Yellow warning panel displays when viewing categories with admin settings
-- Admin-required settings are skipped during "Apply Settings Now"
-
-**Admin users:**
-- Can apply all settings without restrictions
-
-### Multiple Configurations
-
-Create different configuration profiles for different scenarios:
-
-**Example Use Cases:**
-- **Work**: WiFi on, volume at 50%, Dock on bottom
-- **Home**: WiFi on, volume at 75%, Dock auto-hide enabled
-- **Presentation**: WiFi off, volume at 100%, Dock hidden, show all extensions
-
-**Creating a New Config:**
-1. Launch the configurator
-2. Select "Create New Config" (or press 'c')
-3. Enter a name (letters, numbers, spaces, hyphens, underscores allowed)
-4. Configure your settings
-5. The config is automatically saved
-
-**Switching Between Configs:**
-- Exit to the main menu (press 'e')
-- Select a different configuration by number
-- Your settings are automatically loaded
-
-**Deleting a Config:**
-1. From the main menu, press 'd'
-2. Select the config number to delete
-3. Confirm deletion
-
-### Command-line Mode
-
-Apply settings for a specific configuration without interaction (used by generated AppleScript):
-
-```bash
-# Apply specific config
-python3 mac_configurator.py --apply "Work"
-
-# Apply first available config (if config name not specified)
-python3 mac_configurator.py --apply
-```
-
-### Generated AppleScript
-
-Use option 3 in the interactive menu to generate a config-specific AppleScript (e.g., `apply_Work_settings.scpt`).
-
-**Script Location:**
-AppleScripts are saved in the config directory alongside your configuration files:
-- Default: `~/MacConfigurator/apply_[ConfigName]_settings.scpt`
-
-**Run manually:**
-```bash
-osascript ~/MacConfigurator/apply_Work_settings.scpt
-```
-
-**Add to Login Items:**
-1. Open System Settings > General > Login Items
-2. Click '+' under 'Open at Login'
-3. Navigate to `~/MacConfigurator/`
-4. Select the generated script (e.g., `apply_Work_settings.scpt`)
-
-Each configuration can have its own AppleScript for different startup scenarios. All files stay organized in one directory.
+---
 
 ## Configuration
 
-### Architecture
+### Shared Configuration Directory
 
-The configurator uses a **schema-first architecture** with multiple configuration files:
-
-**`.userConfig`** - Stores the configuration directory path
-- Created automatically on first run
-- Default location: `~/MacConfigurator`
-- Contains JSON: `{"config_directory": "/path/to/configs"}`
-- Excluded from git (in .gitignore)
-
-**`settings_schema.json`** - Defines all available settings
-- JSON Schema definitions with validation rules
-- Type constraints (boolean, integer with min/max, enum, string)
-- Metadata (title, description, category, handler, admin requirements)
-- This file defines what CAN be configured
-
-**`[config_name]_config.json`** - Individual configuration files
-- Stored in the directory specified by `.userConfig`
-- Each config file contains ONLY explicitly configured settings
-- Settings not in a config file use system defaults
-- Can be empty or partial - perfectly valid!
-- File naming: `Work_config.json`, `Home_config.json`, etc.
-
-### File Locations
+Both apps use `~/MacConfigurator/` to store configuration profiles:
 
 ```
-Project Directory:
-├── .userConfig                          # Config directory path
-├── settings_schema.json                 # Settings definitions
-└── mac_configurator.py                  # Main application
-
-~/MacConfigurator/ (default config directory):
-├── Work_config.json                     # Work configuration
-├── Home_config.json                     # Home configuration
-├── Presentation_config.json             # Presentation configuration
-├── apply_Work_settings.scpt             # Generated AppleScript for Work
-├── apply_Home_settings.scpt             # Generated AppleScript for Home
-└── apply_Presentation_settings.scpt     # Generated AppleScript for Presentation
+~/MacConfigurator/
+├── Work_config.json
+├── Home_config.json
+├── Presentation_config.json
+└── apply_Work_settings.scpt
 ```
 
-### Example Configuration File
+### Settings Schema
 
-**`Work_config.json`:**
+Settings are defined in `shared/settings_schema.json` using JSON Schema format. This ensures consistent validation across both CLI and GUI versions.
+
+### Configuration Format
+
+Example `Work_config.json`:
 ```json
 {
   "settings": {
     "audio_output_volume": 50,
     "dock_position": "bottom",
+    "dock_autohide": false,
     "wifi_enabled": true
   }
 }
 ```
 
-**`Presentation_config.json`:**
-```json
-{
-  "settings": {
-    "audio_output_volume": 100,
-    "dock_autohide": true,
-    "wifi_enabled": false
-  }
-}
+---
+
+## Project Structure
+
+```
+mac_start/
+├── python_app/              # Python CLI application
+│   ├── mac_configurator.py  # Main CLI script
+│   ├── README.md            # CLI documentation
+│   └── screenshots/         # CLI interface examples
+│
+├── MacConfigurator/         # SwiftUI macOS app
+│   ├── MacConfigurator/     # App source code
+│   │   ├── Models/          # Data models
+│   │   ├── Views/           # SwiftUI views
+│   │   ├── Services/        # System handlers
+│   │   └── Resources/       # Assets and resources
+│   └── MacConfigurator.xcodeproj
+│
+└── shared/                  # Shared resources
+    └── settings_schema.json # Settings definitions
 ```
 
-Note: Only configured settings appear in each file. All other settings use system defaults and won't be applied.
-
-### Validation
-
-**Settings Validation:**
-All settings are validated against `settings_schema.json`:
-- Type checking (boolean, integer, string, enum)
-- Range validation (e.g., volume 0-100)
-- Enum validation (e.g., dock position must be left/bottom/right)
-- Invalid values are rejected with clear error messages
-
-**Config Name Validation:**
-Configuration names must:
-- Contain only letters, numbers, spaces, hyphens, and underscores
-- Not be empty
-- Be unique (no duplicate config names)
-
-## Requirements
-
-- macOS
-- Python 3.7+
-- [Rich](https://github.com/Textualize/rich) library (`pip3 install rich`)
-- [jsonschema](https://pypi.org/project/jsonschema/) library (`pip3 install jsonschema`)
-- Administrator privileges (only for certain settings like WiFi control)
-
-## Adding New Settings
-
-The configurator uses a **schema-first approach** for easy extensibility:
-
-### Step 1: Update `settings_schema.json`
-
-Add your setting definition with JSON Schema validation:
-
-```json
-{
-  "properties": {
-    "settings": {
-      "properties": {
-        "your_setting_key": {
-          "type": "boolean",
-          "title": "Your Setting Name",
-          "description": "What this setting does",
-          "category": "CategoryName",
-          "handler": "YourHandler",
-          "requires_admin": false
-        }
-      }
-    }
-  }
-}
-```
-
-For integers, add `minimum` and `maximum`:
-```json
-{
-  "type": "integer",
-  "minimum": 0,
-  "maximum": 100
-}
-```
-
-For choices/enums:
-```json
-{
-  "type": "string",
-  "enum": ["option1", "option2", "option3"]
-}
-```
-
-### Step 2: Create Handler Class
-
-Create a handler with `get` and `set` methods:
-
-```python
-class YourHandler:
-    @staticmethod
-    def get_your_setting():
-        """Get current system state - returns None on failure"""
-        try:
-            # Query system using subprocess, defaults, etc.
-            return value
-        except:
-            return None
-
-    @staticmethod
-    def set_your_setting(value):
-        """Set system value - returns True/False"""
-        try:
-            # Apply to system
-            return True
-        except:
-            return False
-```
-
-### Step 3: Register Handler
-
-In `MacConfigurator.__init__()`:
-
-1. Instantiate your handler:
-```python
-self.your_handler = YourHandler()
-```
-
-2. Add to handler map:
-```python
-self.handler_map = {
-    'YourHandler': self.your_handler,
-    # ... other handlers
-}
-```
-
-3. Add to handler methods:
-```python
-self.handler_methods = {
-    'your_setting_key': ('get_your_setting', 'set_your_setting'),
-    # ... other methods
-}
-```
-
-That's it! The setting will automatically appear in the UI with validation.
-
-**Note:** You do NOT need to add defaults to `config.json`. Settings only appear there when users explicitly configure them.
-
-## Setting Types
-
-- **boolean**: Yes/No confirmation prompts
-- **integer**: Numeric input with min/max validation
-- **choice**: Multiple choice selection from predefined options
-- **string**: Free text input (useful for paths, names, etc.)
+---
 
 ## Development
 
-### Claude Code Integration
+### Adding New Settings
 
-This project includes `.clinerules` - a project-specific instructions file for Claude Code that ensures:
-- README is updated after user-facing changes
-- Schema-first development is followed when adding settings
-- Proper testing and validation before completing tasks
-- Consistent code style and variable naming
+Both apps use the schema-first approach:
 
-If you're using Claude Code, these rules will be automatically applied.
+1. **Update `shared/settings_schema.json`**
+   ```json
+   {
+     "your_setting_key": {
+       "type": "boolean",
+       "title": "Your Setting Name",
+       "description": "What this setting does",
+       "category": "CategoryName",
+       "handler": "YourHandler",
+       "requires_admin": false
+     }
+   }
+   ```
 
-## Notes
+2. **Implement handler in Python** (for CLI)
+   - Add getter/setter methods
+   - Register in handler map
 
-- **Multiple configs**: Each configuration is completely independent
-- **Config directory**: Stored in `~/MacConfigurator` by default (customizable via `.userConfig`)
-- Settings marked with 🔒 require admin privileges to apply
-- Dock and Finder settings automatically restart their respective applications
-- Screenshot location changes take effect immediately
-- WiFi changes may require admin authentication
-- Settings only apply if you've explicitly configured them in that specific config
-- You can delete/unset settings to return to system defaults
-- Each configuration can have its own AppleScript for automatic application
+3. **Implement handler in Swift** (for GUI)
+   - Add to SettingsApplicator
+   - Settings automatically appear in UI
+
+### Contributing
+
+Contributions are welcome! Whether you prefer Python or Swift, you can contribute to either version.
+
+---
+
+## Requirements
+
+### CLI (Python)
+- macOS
+- Python 3.7+
+- `rich` library
+- `jsonschema` library
+
+### GUI (SwiftUI)
+- macOS 13.0 (Ventura) or later
+- Xcode 14.0+
+- Swift 5.7+
+
+---
+
+## License
+
+[View License](LICENSE)
+
+---
+
+## Which Version Should I Use?
+
+**Use the CLI if you:**
+- Prefer terminal-based workflows
+- Want to automate with scripts
+- Need it to work on older macOS versions
+- Want a lightweight solution
+
+**Use the GUI if you:**
+- Prefer native macOS applications
+- Want visual controls and animations
+- Like the System Settings aesthetic
+- Prefer point-and-click over typing
+
+**Use both if you:**
+- Want the best of both worlds
+- Like switching between terminal and GUI
+- Want to try different interfaces
+
+Both versions share the same configuration files, so you can seamlessly switch between them!
+
+---
+
+## Screenshots
+
+### CLI Interface
+![CLI Main Menu](python_app/screenshots/main_menu.png)
+
+### GUI Interface
+🚧 Coming soon
+
+---
+
+## Roadmap
+
+### CLI (Python) ✅
+- [x] Core settings management
+- [x] Multiple profiles
+- [x] AppleScript generation
+- [x] Startup items management
+- [x] System extensions management
+
+### GUI (SwiftUI) 🚧
+- [x] Project structure
+- [x] Core models and views
+- [ ] Complete Xcode project setup
+- [ ] Settings handlers implementation
+- [ ] Profile management UI
+- [ ] Menu bar app mode
+- [ ] App icon and assets
+- [ ] First release
+
+---
+
+**Made with ❤️ for macOS**
