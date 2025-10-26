@@ -1,45 +1,14 @@
 # Mac System Configurator
 
-Manage and apply Mac system settings with ease - available in both CLI and native macOS GUI versions.
+Manage and apply Mac system settings with ease through a beautiful command-line interface.
 
 ## Overview
 
-This project provides tools to manage macOS system settings through configuration profiles. Create different profiles for different scenarios (Work, Home, Presentation, etc.) and switch between them effortlessly.
-
-Both versions share the same configuration format and settings schema, so you can use whichever interface you prefer.
+This tool manages macOS system settings through configuration profiles. Create different profiles for different scenarios (Work, Home, Presentation, etc.) and switch between them effortlessly.
 
 ---
 
-## 📱 Native macOS App (SwiftUI)
-
-**Status:** 🚧 In Development
-
-A beautiful, native macOS application built with SwiftUI.
-
-### Features (Planned)
-- Native macOS interface matching System Settings design
-- Sidebar navigation by category
-- Real-time sync indicators
-- Visual settings controls (toggles, sliders, pickers)
-- Profile management with quick switching
-- Live preview of settings changes
-- Menu bar integration (optional)
-
-### Getting Started
-
-The SwiftUI app is located in the `MacConfigurator/` directory.
-
-To build and run:
-1. Open `MacConfigurator/MacConfigurator.xcodeproj` in Xcode
-2. Build and run (⌘R)
-
-The GUI app shares configuration files with the CLI version in `~/MacConfigurator/`.
-
-📖 [More details →](MacConfigurator/README.md)
-
----
-
-## 💻 Command-Line Interface (Python)
+## 💻 Command-Line Interface
 
 A fully-featured terminal application with a beautiful Rich-powered UI.
 
@@ -73,7 +42,7 @@ cfg
 
 ## Available Settings
 
-Both versions support the same comprehensive set of macOS settings:
+Comprehensive set of macOS settings:
 
 ### 🌐 Network
 - WiFi enabled/disabled (requires admin)
@@ -107,9 +76,9 @@ Both versions support the same comprehensive set of macOS settings:
 
 ## Configuration
 
-### Shared Configuration Directory
+### Configuration Directory
 
-Both apps use `~/MacConfigurator/` to store configuration profiles:
+The app uses `~/MacConfigurator/` to store configuration profiles:
 
 ```
 ~/MacConfigurator/
@@ -121,7 +90,7 @@ Both apps use `~/MacConfigurator/` to store configuration profiles:
 
 ### Settings Schema
 
-Settings are defined in `shared/settings_schema.json` using JSON Schema format. This ensures consistent validation across both CLI and GUI versions.
+Settings are defined in `shared/settings_schema.json` using JSON Schema format for validation.
 
 ### Configuration Format
 
@@ -142,19 +111,11 @@ Example `Work_config.json`:
 ## Project Structure
 
 ```
-mac_start/
+mac_configurator/
 ├── python_app/              # Python CLI application
 │   ├── mac_configurator.py  # Main CLI script
 │   ├── README.md            # CLI documentation
 │   └── screenshots/         # CLI interface examples
-│
-├── MacConfigurator/         # SwiftUI macOS app
-│   ├── MacConfigurator/     # App source code
-│   │   ├── Models/          # Data models
-│   │   ├── Views/           # SwiftUI views
-│   │   ├── Services/        # System handlers
-│   │   └── Resources/       # Assets and resources
-│   └── MacConfigurator.xcodeproj
 │
 └── shared/                  # Shared resources
     └── settings_schema.json # Settings definitions
@@ -166,7 +127,7 @@ mac_start/
 
 ### Adding New Settings
 
-Both apps use the schema-first approach:
+The schema-first approach:
 
 1. **Update `shared/settings_schema.json`**
    ```json
@@ -182,32 +143,22 @@ Both apps use the schema-first approach:
    }
    ```
 
-2. **Implement handler in Python** (for CLI)
+2. **Implement handler in Python**
    - Add getter/setter methods
    - Register in handler map
 
-3. **Implement handler in Swift** (for GUI)
-   - Add to SettingsApplicator
-   - Settings automatically appear in UI
-
 ### Contributing
 
-Contributions are welcome! Whether you prefer Python or Swift, you can contribute to either version.
+Contributions are welcome!
 
 ---
 
 ## Requirements
 
-### CLI (Python)
 - macOS
 - Python 3.7+
 - `rich` library
 - `jsonschema` library
-
-### GUI (SwiftUI)
-- macOS 13.0 (Ventura) or later
-- Xcode 14.0+
-- Swift 5.7+
 
 ---
 
@@ -217,57 +168,117 @@ Contributions are welcome! Whether you prefer Python or Swift, you can contribut
 
 ---
 
-## Which Version Should I Use?
-
-**Use the CLI if you:**
-- Prefer terminal-based workflows
-- Want to automate with scripts
-- Need it to work on older macOS versions
-- Want a lightweight solution
-
-**Use the GUI if you:**
-- Prefer native macOS applications
-- Want visual controls and animations
-- Like the System Settings aesthetic
-- Prefer point-and-click over typing
-
-**Use both if you:**
-- Want the best of both worlds
-- Like switching between terminal and GUI
-- Want to try different interfaces
-
-Both versions share the same configuration files, so you can seamlessly switch between them!
-
----
-
 ## Screenshots
 
-### CLI Interface
-![CLI Main Menu](python_app/screenshots/main_menu.png)
+The configurator features a beautiful, color-coded Rich terminal interface:
 
-### GUI Interface
-🚧 Coming soon
+### Main Menu
+```
+╭────────────────────────────────────────────────────────────────╮
+│                   Mac System Configurator                      │
+╰────────────────────────────────────────────────────────────────╯
+
+Config directory: ~/MacConfigurator
+
+    Available
+    Configurations
+
+┌───┬─────────────┐
+│ # │ Config Name │
+├───┼─────────────┤
+│ 1 │ Work        │
+│ 2 │ Home        │
+│ 3 │ Presentation│
+└───┴─────────────┘
+
+┌─────┬──────────────────────────────┐
+│ [1] │ Edit Config (select number)  │
+│     │ Create New Config            │
+│     │ Delete a Config              │
+│ [e] │ Exit                         │
+└─────┴──────────────────────────────┘
+
+Select option: ▌
+```
+
+### Manage Settings - Category Selection
+```
+Manage Settings - Select Category
+
+┌─────┬────────────────┐
+│ [1] │ 🌐 Network     │
+│ [2] │ 🔊 Audio       │
+│ [3] │ 📱 Dock        │
+│ [4] │ 📁 Finder      │
+│ [5] │ ⚙️  System     │
+└─────┴────────────────┘
+
+Press Enter to return to main menu
+
+Select category (): ▌
+```
+
+Categories are color-coded for easy identification.
+
+### Finder Settings View
+```
+Finder Settings
+
+┌────────┬──────────────────────┬────────────┬─────────┬────────┐
+│ Option │ Setting              │ Configured │ Current │ Status │
+├────────┼──────────────────────┼────────────┼─────────┼────────┤
+│ [1]    │ Show Hidden Files    │ False      │ False   │   ✓    │
+│ [2]    │ Show All Extensions  │ True       │ True    │   ✓    │
+└────────┴──────────────────────┴────────────┴─────────┴────────┘
+
+Press Enter to return to category menu
+
+Select setting to edit (): ▌
+```
+
+Settings display shows:
+- **Configured** (Yellow) = Your configured values
+- **Current** (Magenta) = Current actual system values
+- **✓** = Matched (settings in sync)
+- **⚠** = Mismatched (configured value differs from system)
+- **○** = Not configured (using system defaults)
+- **🔒** = Requires admin privileges
+
+### AppleScript Generation
+```
+┌───────────────────────┐
+│ AppleScript Generated │
+└───────────────────────┘
+
+✓ Script saved to: ~/MacConfigurator/apply_Work_settings.scpt
+
+To run manually:
+  osascript ~/MacConfigurator/apply_Work_settings.scpt
+
+To add to startup:
+  1. Open System Settings > General > Login Items
+  2. Click '+' under 'Open at Login'
+  3. Select: ~/MacConfigurator/apply_Work_settings.scpt
+
+Press Enter to continue...▌
+```
 
 ---
 
 ## Roadmap
 
-### CLI (Python) ✅
+### Completed ✅
 - [x] Core settings management
 - [x] Multiple profiles
 - [x] AppleScript generation
 - [x] Startup items management
 - [x] System extensions management
 
-### GUI (SwiftUI) 🚧
-- [x] Project structure
-- [x] Core models and views
-- [ ] Complete Xcode project setup
-- [ ] Settings handlers implementation
-- [ ] Profile management UI
-- [ ] Menu bar app mode
-- [ ] App icon and assets
-- [ ] First release
+### Future Enhancements
+- [ ] Additional system settings
+- [ ] Configuration import/export
+- [ ] Settings templates
+- [ ] Automated testing framework
 
 ---
 
